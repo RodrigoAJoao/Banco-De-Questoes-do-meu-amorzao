@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Download, Star, ChevronLeft, ChevronRight, User, Plus, X, Image as ImageIcon, Upload, ArrowLeft, Tag, Play, CheckCircle2, Timer, Clock, AlertCircle, BarChart3, TrendingUp, Target, Heart } from 'lucide-react';
+import { Download, Star, ChevronLeft, ChevronRight, User, Plus, X, Image as ImageIcon, Upload, ArrowLeft, Tag, Play, CheckCircle2, Timer, Clock, AlertCircle, BarChart3, TrendingUp, Target, Heart, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, ReactNode, useRef, KeyboardEvent, ChangeEvent, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -44,17 +44,49 @@ type View = 'home' | 'add-question' | 'take-quiz' | 'quiz-session' | 'question-b
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
   const [currentIndex, setCurrentIndex] = useState(1);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [questions, setQuestions] = useState<Question[]>(() => {
+    const saved = localStorage.getItem('vestibular_questions');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [attempts, setAttempts] = useState<Attempt[]>(() => {
+    const saved = localStorage.getItem('vestibular_attempts');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   // Profile State
-  const [userName, setUserName] = useState('Rodrigo Aschidamini João');
-  const [userPhoto, setUserPhoto] = useState<string | null>(null);
-  const [bgImage, setBgImage] = useState<string | null>(null);
-  const [primaryColor, setPrimaryColor] = useState('#db2777'); // Default pink-600
-  const [secondaryColor, setSecondaryColor] = useState('#fce4ec'); // Default pink-50
-  const [accentColor, setAccentColor] = useState('#be185d'); // Default pink-700
+  const [userName, setUserName] = useState(() => localStorage.getItem('vestibular_userName') || 'Rodrigo Aschidamini João');
+  const [userPhoto, setUserPhoto] = useState<string | null>(() => localStorage.getItem('vestibular_userPhoto'));
+  const [bgImage, setBgImage] = useState<string | null>(() => localStorage.getItem('vestibular_bgImage'));
+  const [primaryColor, setPrimaryColor] = useState(() => localStorage.getItem('vestibular_primaryColor') || '#db2777');
+  const [secondaryColor, setSecondaryColor] = useState(() => localStorage.getItem('vestibular_secondaryColor') || '#fce4ec');
+  const [accentColor, setAccentColor] = useState(() => localStorage.getItem('vestibular_accentColor') || '#be185d');
   
+  // Persistence Effect
+  useEffect(() => {
+    localStorage.setItem('vestibular_questions', JSON.stringify(questions));
+  }, [questions]);
+
+  useEffect(() => {
+    localStorage.setItem('vestibular_attempts', JSON.stringify(attempts));
+  }, [attempts]);
+
+  useEffect(() => {
+    localStorage.setItem('vestibular_userName', userName);
+    if (userPhoto) {
+      localStorage.setItem('vestibular_userPhoto', userPhoto);
+    } else {
+      localStorage.removeItem('vestibular_userPhoto');
+    }
+    if (bgImage) {
+      localStorage.setItem('vestibular_bgImage', bgImage);
+    } else {
+      localStorage.removeItem('vestibular_bgImage');
+    }
+    localStorage.setItem('vestibular_primaryColor', primaryColor);
+    localStorage.setItem('vestibular_secondaryColor', secondaryColor);
+    localStorage.setItem('vestibular_accentColor', accentColor);
+  }, [userName, userPhoto, bgImage, primaryColor, secondaryColor, accentColor]);
+
   useEffect(() => {
     document.documentElement.style.setProperty('--primary-color', primaryColor);
     document.documentElement.style.setProperty('--secondary-color', secondaryColor);
@@ -101,6 +133,8 @@ export default function App() {
   const [bankSubject, setBankSubject] = useState('Todas');
   const [bankStatus, setBankStatus] = useState<'all' | 'correct' | 'incorrect'>('all');
   const [bankSearch, setBankSearch] = useState('');
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Performance Filter State
   const [perfSubject, setPerfSubject] = useState('Todas');
@@ -423,19 +457,38 @@ export default function App() {
       return;
     }
 
-    const newQuestion: Question = {
-      id: Date.now().toString(),
-      text: questionText,
-      imageUrl: imagePreview || undefined,
-      answer: selectedAnswer,
-      subject: selectedSubject,
-      tags: tags,
-      createdAt: Date.now(),
-      resolution: resolutionType === 'text' ? questionResolution : undefined,
-      resolutionImageUrl: resolutionType === 'image' ? (resolutionImagePreview || undefined) : undefined
-    };
+    if (editingQuestionId) {
+      setQuestions(prev => prev.map(q => {
+        if (q.id === editingQuestionId) {
+          return {
+            ...q,
+            text: questionText,
+            imageUrl: imagePreview || undefined,
+            answer: selectedAnswer,
+            subject: selectedSubject,
+            tags: tags,
+            resolution: resolutionType === 'text' ? questionResolution : undefined,
+            resolutionImageUrl: resolutionType === 'image' ? (resolutionImagePreview || undefined) : undefined
+          };
+        }
+        return q;
+      }));
+      setEditingQuestionId(null);
+    } else {
+      const newQuestion: Question = {
+        id: Date.now().toString(),
+        text: questionText,
+        imageUrl: imagePreview || undefined,
+        answer: selectedAnswer,
+        subject: selectedSubject,
+        tags: tags,
+        createdAt: Date.now(),
+        resolution: resolutionType === 'text' ? questionResolution : undefined,
+        resolutionImageUrl: resolutionType === 'image' ? (resolutionImagePreview || undefined) : undefined
+      };
+      setQuestions([newQuestion, ...questions]);
+    }
 
-    setQuestions([newQuestion, ...questions]);
     setQuestionText('');
     setQuestionResolution('');
     setResolutionImagePreview(null);
@@ -445,6 +498,31 @@ export default function App() {
     setTags([]);
     setImagePreview(null);
     setCurrentView('home');
+  };
+
+  const clearForm = () => {
+    setQuestionText('');
+    setQuestionResolution('');
+    setResolutionImagePreview(null);
+    setResolutionType('text');
+    setSelectedAnswer('A');
+    setSelectedSubject('Matemática');
+    setTags([]);
+    setImagePreview(null);
+    setEditingQuestionId(null);
+  };
+
+  const handleEditQuestion = (q: Question) => {
+    setEditingQuestionId(q.id);
+    setQuestionText(q.text);
+    setQuestionResolution(q.resolution || '');
+    setResolutionImagePreview(q.resolutionImageUrl || null);
+    setResolutionType(q.resolutionImageUrl ? 'image' : 'text');
+    setSelectedAnswer(q.answer);
+    setSelectedSubject(q.subject);
+    setTags(q.tags);
+    setImagePreview(q.imageUrl || null);
+    setCurrentView('add-question');
   };
 
   const handleDrawQuestions = () => {
@@ -737,10 +815,18 @@ export default function App() {
   const renderAddQuestion = () => (
     <motion.div initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }} className="w-full max-w-4xl glass-card rounded-3xl p-8">
       <div className="flex items-center mb-8">
-        <button onClick={() => setCurrentView('home')} className="p-2 hover:bg-pink-100 rounded-full transition-colors mr-4">
+        <button 
+          onClick={() => {
+            clearForm();
+            setCurrentView('home');
+          }} 
+          className="p-2 hover:bg-pink-100 rounded-full transition-colors mr-4"
+        >
           <ArrowLeft className="w-6 h-6" style={{ color: primaryColor }} />
         </button>
-        <h2 className="text-3xl font-romantic font-bold" style={{ color: accentColor }}>Adicionar Nova Questão</h2>
+        <h2 className="text-3xl font-romantic font-bold" style={{ color: accentColor }}>
+          {editingQuestionId ? 'Editar Questão' : 'Adicionar Nova Questão'}
+        </h2>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-6">
@@ -888,7 +974,8 @@ export default function App() {
               className="w-full py-4 text-white rounded-xl font-bold text-lg shadow-lg transition-colors flex items-center justify-center gap-2"
               style={{ backgroundColor: primaryColor }}
             >
-              <Plus className="w-6 h-6" /> Adicionar ao Banco
+              {editingQuestionId ? <CheckCircle2 className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
+              {editingQuestionId ? 'Salvar Alterações' : 'Adicionar ao Banco'}
             </motion.button>
           </div>
         </div>
@@ -1255,16 +1342,41 @@ export default function App() {
                 </div>
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <span className="text-xs font-bold text-gray-400">Gabarito: {q.answer}</span>
-                  <button 
-                    onClick={() => {
-                      if (confirm('Deseja excluir esta questão?')) {
-                        setQuestions(questions.filter(item => item.id !== q.id));
-                      }
-                    }}
-                    className="p-2 text-gray-300 hover:text-rose-500 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={() => handleEditQuestion(q)}
+                      className="p-2 text-gray-300 hover:text-blue-500 transition-colors"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    
+                    {deletingId === q.id ? (
+                      <div className="flex items-center gap-1 bg-rose-50 rounded-lg p-1 border border-rose-100">
+                        <button 
+                          onClick={() => {
+                            setQuestions(questions.filter(item => item.id !== q.id));
+                            setDeletingId(null);
+                          }}
+                          className="text-[10px] font-bold text-rose-600 px-2 py-1 hover:bg-rose-100 rounded transition-colors"
+                        >
+                          Confirmar
+                        </button>
+                        <button 
+                          onClick={() => setDeletingId(null)}
+                          className="text-[10px] font-bold text-gray-400 px-2 py-1 hover:bg-gray-100 rounded transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={() => setDeletingId(q.id)}
+                        className="p-2 text-gray-300 hover:text-rose-500 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             ))
