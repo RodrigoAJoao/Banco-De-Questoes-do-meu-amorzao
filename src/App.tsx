@@ -60,6 +60,9 @@ export default function App() {
   const [primaryColor, setPrimaryColor] = useState(() => localStorage.getItem('vestibular_primaryColor') || '#db2777');
   const [secondaryColor, setSecondaryColor] = useState(() => localStorage.getItem('vestibular_secondaryColor') || '#fce4ec');
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem('vestibular_accentColor') || '#be185d');
+  const [statsColor, setStatsColor] = useState(() => localStorage.getItem('vestibular_statsColor') || '#db2777');
+  const [statsBgColor, setStatsBgColor] = useState(() => localStorage.getItem('vestibular_statsBgColor') || '#ffffff');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   
   // Persistence Effect
   useEffect(() => {
@@ -85,7 +88,9 @@ export default function App() {
     localStorage.setItem('vestibular_primaryColor', primaryColor);
     localStorage.setItem('vestibular_secondaryColor', secondaryColor);
     localStorage.setItem('vestibular_accentColor', accentColor);
-  }, [userName, userPhoto, bgImage, primaryColor, secondaryColor, accentColor]);
+    localStorage.setItem('vestibular_statsColor', statsColor);
+    localStorage.setItem('vestibular_statsBgColor', statsBgColor);
+  }, [userName, userPhoto, bgImage, primaryColor, secondaryColor, accentColor, statsColor, statsBgColor]);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--primary-color', primaryColor);
@@ -174,33 +179,33 @@ export default function App() {
       id: 0,
       value: classifiedCount,
       label: "Classificadas",
-      icon: <div className="w-12 h-12 rounded-full border-4 border-pink-600 flex items-center justify-center text-pink-600 font-bold text-xl">{classifiedCount}</div>,
-      color: "bg-pink-50",
-      textColor: "text-pink-600"
+      icon: <div className="w-12 h-12 rounded-full border-4 flex items-center justify-center font-bold text-xl" style={{ borderColor: statsColor, color: statsColor }}>{classifiedCount}</div>,
+      color: "",
+      textColor: "text-gray-700"
     },
     {
       id: 1,
       value: reviewedCount,
       label: "Questões revisadas",
-      icon: <Heart className="w-16 h-16 text-white fill-white" />,
-      color: "bg-pink-500",
-      textColor: "text-white"
+      icon: <Heart className="w-16 h-16" style={{ color: statsColor, fill: statsColor }} />,
+      color: "",
+      textColor: "text-gray-700"
     },
     {
       id: 2,
       value: correctCount,
       label: "Questões certas",
-      icon: <Star className="w-12 h-12 text-pink-500 fill-pink-500" />,
-      color: "bg-pink-50",
-      textColor: "text-pink-600"
+      icon: <Star className="w-12 h-12" style={{ color: statsColor, fill: statsColor }} />,
+      color: "",
+      textColor: "text-gray-700"
     },
     {
       id: 3,
       value: incorrectCount,
       label: "Questões erradas",
-      icon: <AlertCircle className="w-12 h-12 text-rose-500" />,
-      color: "bg-pink-50",
-      textColor: "text-pink-600"
+      icon: <AlertCircle className="w-12 h-12" style={{ color: statsColor }} />,
+      color: "",
+      textColor: "text-gray-700"
     }
   ];
 
@@ -455,9 +460,35 @@ export default function App() {
                 <span className="text-sm font-mono" style={{ color: primaryColor }}>{accentColor}</span>
               </div>
             </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2" style={{ color: accentColor }}>Cor dos Cards de Estatística (Ícones)</label>
+              <div className="flex items-center gap-3">
+                <input 
+                  type="color" 
+                  value={statsColor} 
+                  onChange={(e) => setStatsColor(e.target.value)} 
+                  className="w-12 h-12 rounded-lg cursor-pointer border-none"
+                />
+                <span className="text-sm font-mono" style={{ color: primaryColor }}>{statsColor}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2" style={{ color: accentColor }}>Cor dos Cards de Estatística (Fundo)</label>
+              <div className="flex items-center gap-3">
+                <input 
+                  type="color" 
+                  value={statsBgColor} 
+                  onChange={(e) => setStatsBgColor(e.target.value)} 
+                  className="w-12 h-12 rounded-lg cursor-pointer border-none"
+                />
+                <span className="text-sm font-mono" style={{ color: primaryColor }}>{statsBgColor}</span>
+              </div>
+            </div>
           </div>
 
-          <div className="pt-6">
+          <div className="pt-6 space-y-3">
             <motion.button 
               onClick={() => setCurrentView('home')} 
               whileHover={{ scale: 1.02 }} 
@@ -467,6 +498,37 @@ export default function App() {
             >
               Salvar Perfil
             </motion.button>
+            
+            {!showResetConfirm ? (
+              <motion.button 
+                onClick={() => setShowResetConfirm(true)} 
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }} 
+                className="w-full py-3 bg-white/50 border-2 rounded-xl font-bold text-sm shadow-sm transition-colors flex items-center justify-center gap-2"
+                style={{ color: '#f43f5e', borderColor: '#f43f5e20' }}
+              >
+                <Trash2 className="w-4 h-4" /> Redefinir para o Padrão
+              </motion.button>
+            ) : (
+              <div className="flex gap-2">
+                <motion.button 
+                  onClick={handleResetDefaults} 
+                  whileHover={{ scale: 1.02 }} 
+                  whileTap={{ scale: 0.98 }} 
+                  className="flex-1 py-3 bg-rose-500 text-white rounded-xl font-bold text-sm shadow-sm transition-colors"
+                >
+                  Confirmar Reset
+                </motion.button>
+                <motion.button 
+                  onClick={() => setShowResetConfirm(false)} 
+                  whileHover={{ scale: 1.02 }} 
+                  whileTap={{ scale: 0.98 }} 
+                  className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-xl font-bold text-sm shadow-sm transition-colors"
+                >
+                  Cancelar
+                </motion.button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -520,6 +582,27 @@ export default function App() {
     setTags([]);
     setImagePreview(null);
     setCurrentView('home');
+  };
+
+  const handleResetDefaults = () => {
+    setUserName('Rodrigo Aschidamini João');
+    setUserPhoto(null);
+    setBgImage(null);
+    setPrimaryColor('#db2777');
+    setSecondaryColor('#fce4ec');
+    setAccentColor('#be185d');
+    setStatsColor('#db2777');
+    setStatsBgColor('#ffffff');
+    
+    localStorage.removeItem('vestibular_userName');
+    localStorage.removeItem('vestibular_userPhoto');
+    localStorage.removeItem('vestibular_bgImage');
+    localStorage.removeItem('vestibular_primaryColor');
+    localStorage.removeItem('vestibular_secondaryColor');
+    localStorage.removeItem('vestibular_accentColor');
+    localStorage.removeItem('vestibular_statsColor');
+    localStorage.removeItem('vestibular_statsBgColor');
+    setShowResetConfirm(false);
   };
 
   const clearForm = () => {
@@ -722,9 +805,10 @@ export default function App() {
                     opacity: isCenter ? 1 : 0.5,
                     zIndex: isCenter ? 20 : 10
                   }}
-                  className={`${stat.color} ${stat.textColor} rounded-[2rem] p-8 flex flex-col items-center justify-center shadow-sm transition-all duration-300 border-2 border-white/50 ${
+                  className={`${stat.textColor} rounded-[2rem] p-8 flex flex-col items-center justify-center shadow-sm transition-all duration-300 border-2 border-white/50 ${
                     isCenter ? 'w-[450px] h-[280px] shadow-2xl' : 'w-[280px] h-[200px]'
                   }`}
+                  style={{ backgroundColor: statsBgColor }}
                 >
                   <div className="mb-4">{stat.icon}</div>
                   <div className={`font-bold ${isCenter ? 'text-5xl' : 'text-3xl'} mb-2`}>{stat.value}</div>
@@ -741,7 +825,8 @@ export default function App() {
                 initial={{ opacity: 0, x: 50 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -50 }}
-                className={`${stats[currentIndex].color} ${stats[currentIndex].textColor} w-full max-w-sm h-[250px] rounded-[2rem] p-8 flex flex-col items-center justify-center shadow-xl border-2 border-white/50`}
+                className={`${stats[currentIndex].textColor} w-full max-w-sm h-[250px] rounded-[2rem] p-8 flex flex-col items-center justify-center shadow-xl border-2 border-white/50`}
+                style={{ backgroundColor: statsBgColor }}
               >
                 <div className="mb-4">{stats[currentIndex].icon}</div>
                 <div className="font-bold text-5xl mb-2">{stats[currentIndex].value}</div>
