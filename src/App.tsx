@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Download, Star, ChevronLeft, ChevronRight, User, Plus, X, Image as ImageIcon, Upload, ArrowLeft, Tag, Play, CheckCircle2, Timer, Clock, AlertCircle, BarChart3, TrendingUp, Target, Heart, Pencil } from 'lucide-react';
+import { Download, Star, ChevronLeft, ChevronRight, User, Plus, X, Image as ImageIcon, Upload, ArrowLeft, Tag, Play, CheckCircle2, Timer, Clock, AlertCircle, BarChart3, TrendingUp, Target, Heart, Pencil, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, ReactNode, useRef, KeyboardEvent, ChangeEvent, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -356,7 +356,18 @@ export default function App() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold mb-2" style={{ color: accentColor }}>Foto de Perfil</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold" style={{ color: accentColor }}>Foto de Perfil</label>
+              {userPhoto && (
+                <button 
+                  onClick={() => setUserPhoto(null)}
+                  className="text-xs font-bold flex items-center gap-1 hover:text-rose-500 transition-colors"
+                  style={{ color: `${primaryColor}80` }}
+                >
+                  <Trash2 className="w-3 h-3" /> Remover
+                </button>
+              )}
+            </div>
             <div 
               onClick={() => profilePhotoInputRef.current?.click()} 
               className="w-32 h-32 border-2 border-dashed rounded-full flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden relative"
@@ -372,7 +383,18 @@ export default function App() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold mb-2" style={{ color: accentColor }}>Imagem de Fundo</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold" style={{ color: accentColor }}>Imagem de Fundo</label>
+              {bgImage && (
+                <button 
+                  onClick={() => setBgImage(null)}
+                  className="text-xs font-bold flex items-center gap-1 hover:text-rose-500 transition-colors"
+                  style={{ color: `${primaryColor}80` }}
+                >
+                  <Trash2 className="w-3 h-3" /> Remover
+                </button>
+              )}
+            </div>
             <div 
               onClick={() => bgImageInputRef.current?.click()} 
               className="w-full h-40 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden relative"
