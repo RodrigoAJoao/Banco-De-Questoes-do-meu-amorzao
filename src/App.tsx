@@ -244,43 +244,7 @@ export default function App() {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-
-          const maxDim = 1024;
-          if (width > height) {
-            if (width > maxDim) {
-              height *= maxDim / width;
-              width = maxDim;
-            }
-          } else {
-            if (height > maxDim) {
-              width *= maxDim / height;
-              height = maxDim;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-
-          let quality = 0.9;
-          let dataUrl = canvas.toDataURL('image/jpeg', quality);
-          const maxSizeBytes = 2 * 1024 * 1024; // 2MB limit
-          
-          while (dataUrl.length * 0.75 > maxSizeBytes && quality > 0.1) {
-            quality -= 0.05;
-            dataUrl = canvas.toDataURL('image/jpeg', quality);
-          }
-
-          resolve(dataUrl);
-        };
-        img.onerror = reject;
+        resolve(event.target?.result as string);
       };
       reader.onerror = reject;
     });
