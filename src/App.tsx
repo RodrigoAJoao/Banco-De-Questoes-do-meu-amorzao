@@ -678,6 +678,8 @@ export default function App() {
         primaryColor,
         secondaryColor,
         accentColor,
+        statsColor,
+        statsBgColor,
       },
       exportDate: new Date().toISOString(),
     };
@@ -709,12 +711,14 @@ export default function App() {
           setAttempts(data.attempts);
         }
         if (data.profile) {
-          if (data.profile.userName) setUserName(data.profile.userName);
-          if (data.profile.userPhoto) setUserPhoto(data.profile.userPhoto);
-          if (data.profile.bgImage) setBgImage(data.profile.bgImage);
-          if (data.profile.primaryColor) setPrimaryColor(data.profile.primaryColor);
-          if (data.profile.secondaryColor) setSecondaryColor(data.profile.secondaryColor);
-          if (data.profile.accentColor) setAccentColor(data.profile.accentColor);
+          if (data.profile.userName !== undefined) setUserName(data.profile.userName);
+          if (data.profile.userPhoto !== undefined) setUserPhoto(data.profile.userPhoto);
+          if (data.profile.bgImage !== undefined) setBgImage(data.profile.bgImage);
+          if (data.profile.primaryColor !== undefined) setPrimaryColor(data.profile.primaryColor);
+          if (data.profile.secondaryColor !== undefined) setSecondaryColor(data.profile.secondaryColor);
+          if (data.profile.accentColor !== undefined) setAccentColor(data.profile.accentColor);
+          if (data.profile.statsColor !== undefined) setStatsColor(data.profile.statsColor);
+          if (data.profile.statsBgColor !== undefined) setStatsBgColor(data.profile.statsBgColor);
         }
         
         alert('Dados importados com sucesso!');
