@@ -3,10 +3,49 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Download, Star, ChevronLeft, ChevronRight, User, Plus, X, Image as ImageIcon, Upload, ArrowLeft, Tag, Play, CheckCircle2, Timer, Clock, AlertCircle, BarChart3, TrendingUp, Target, Heart, Pencil, Trash2 } from 'lucide-react';
+import { Download, Star, ChevronLeft, ChevronRight, User, Plus, X, Image as ImageIcon, Upload, ArrowLeft, Tag, Play, CheckCircle2, Timer, Clock, AlertCircle, BarChart3, TrendingUp, Target, Heart, Pencil, Trash2, RefreshCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useState, ReactNode, useRef, KeyboardEvent, ChangeEvent, useEffect, useMemo } from 'react';
+import { useState, ReactNode, useRef, KeyboardEvent, ChangeEvent, useEffect, useMemo, Component, ErrorInfo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(_: Error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center bg-rose-50">
+          <AlertCircle className="w-16 h-16 text-rose-500 mb-4" />
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Ops! Algo deu errado.</h1>
+          <p className="text-gray-600 mb-6">Ocorreu um erro inesperado ao carregar as informações.</p>
+          <button
+            onClick={() => {
+              localStorage.clear();
+              window.location.reload();
+            }}
+            className="px-6 py-3 bg-rose-500 text-white rounded-xl font-bold shadow-lg hover:bg-rose-600 transition-colors flex items-center gap-2"
+          >
+            <RefreshCcw className="w-5 h-5" /> Limpar Dados e Recarregar
+          </button>
+          <p className="mt-4 text-xs text-gray-400">Isso pode acontecer se os dados importados forem inválidos ou excederem o limite de memória.</p>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 interface StatCard {
   id: number;
@@ -41,16 +80,34 @@ interface Attempt {
 
 type View = 'home' | 'add-question' | 'take-quiz' | 'quiz-session' | 'question-bank' | 'performance' | 'edit-profile';
 
-export default function App() {
+export default function AppWrapper() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
+
+function App() {
   const [currentView, setCurrentView] = useState<View>('home');
   const [currentIndex, setCurrentIndex] = useState(1);
   const [questions, setQuestions] = useState<Question[]>(() => {
     const saved = localStorage.getItem('vestibular_questions');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Error parsing questions from localStorage", e);
+      return [];
+    }
   });
   const [attempts, setAttempts] = useState<Attempt[]>(() => {
     const saved = localStorage.getItem('vestibular_attempts');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Error parsing attempts from localStorage", e);
+      return [];
+    }
   });
 
   // Profile State
@@ -66,30 +123,42 @@ export default function App() {
   
   // Persistence Effect
   useEffect(() => {
-    localStorage.setItem('vestibular_questions', JSON.stringify(questions));
+    try {
+      localStorage.setItem('vestibular_questions', JSON.stringify(questions));
+    } catch (e) {
+      console.error("Failed to save questions to localStorage", e);
+    }
   }, [questions]);
 
   useEffect(() => {
-    localStorage.setItem('vestibular_attempts', JSON.stringify(attempts));
+    try {
+      localStorage.setItem('vestibular_attempts', JSON.stringify(attempts));
+    } catch (e) {
+      console.error("Failed to save attempts to localStorage", e);
+    }
   }, [attempts]);
 
   useEffect(() => {
-    localStorage.setItem('vestibular_userName', userName);
-    if (userPhoto) {
-      localStorage.setItem('vestibular_userPhoto', userPhoto);
-    } else {
-      localStorage.removeItem('vestibular_userPhoto');
+    try {
+      localStorage.setItem('vestibular_userName', userName);
+      if (userPhoto) {
+        localStorage.setItem('vestibular_userPhoto', userPhoto);
+      } else {
+        localStorage.removeItem('vestibular_userPhoto');
+      }
+      if (bgImage) {
+        localStorage.setItem('vestibular_bgImage', bgImage);
+      } else {
+        localStorage.removeItem('vestibular_bgImage');
+      }
+      localStorage.setItem('vestibular_primaryColor', primaryColor);
+      localStorage.setItem('vestibular_secondaryColor', secondaryColor);
+      localStorage.setItem('vestibular_accentColor', accentColor);
+      localStorage.setItem('vestibular_statsColor', statsColor);
+      localStorage.setItem('vestibular_statsBgColor', statsBgColor);
+    } catch (e) {
+      console.error("Failed to save profile to localStorage", e);
     }
-    if (bgImage) {
-      localStorage.setItem('vestibular_bgImage', bgImage);
-    } else {
-      localStorage.removeItem('vestibular_bgImage');
-    }
-    localStorage.setItem('vestibular_primaryColor', primaryColor);
-    localStorage.setItem('vestibular_secondaryColor', secondaryColor);
-    localStorage.setItem('vestibular_accentColor', accentColor);
-    localStorage.setItem('vestibular_statsColor', statsColor);
-    localStorage.setItem('vestibular_statsBgColor', statsBgColor);
   }, [userName, userPhoto, bgImage, primaryColor, secondaryColor, accentColor, statsColor, statsBgColor]);
 
   useEffect(() => {
@@ -100,9 +169,9 @@ export default function App() {
 
   // Derived Stats
   const classifiedCount = questions.length;
-  const reviewedCount = questions.filter(q => q.lastResult).length;
-  const correctCount = questions.filter(q => q.lastResult === 'correct').length;
-  const incorrectCount = questions.filter(q => q.lastResult === 'incorrect').length;
+  const reviewedCount = questions.filter(q => q && q.lastResult).length;
+  const correctCount = questions.filter(q => q && q.lastResult === 'correct').length;
+  const incorrectCount = questions.filter(q => q && q.lastResult === 'incorrect').length;
 
   // Form State
   const [questionText, setQuestionText] = useState('');
@@ -148,8 +217,9 @@ export default function App() {
   // Performance Chart Data (Top-level to follow Rules of Hooks)
   const chartData = useMemo(() => {
     const filteredAttempts = attempts.filter(a => {
+      if (!a) return false;
       const matchesSubject = perfSubject === 'Todas' || a.subject === perfSubject;
-      const matchesTag = perfTag === 'Todos' || a.tags.includes(perfTag);
+      const matchesTag = perfTag === 'Todos' || (a.tags && Array.isArray(a.tags) && a.tags.includes(perfTag));
       return matchesSubject && matchesTag;
     });
 
@@ -172,7 +242,7 @@ export default function App() {
   const answers = ['A', 'B', 'C', 'D', 'E'];
 
   // Get unique tags from all questions
-  const allTags = Array.from(new Set(questions.flatMap(q => q.tags)));
+  const allTags = Array.from(new Set(questions.flatMap(q => (q && q.tags && Array.isArray(q.tags)) ? q.tags : [])));
 
   const stats: StatCard[] = [
     {
@@ -595,12 +665,12 @@ export default function App() {
   };
 
   const handleDrawQuestions = () => {
-    let filtered = [...questions];
+    let filtered = [...questions].filter(q => q !== null && q !== undefined);
     if (quizSubject !== 'Todas') {
       filtered = filtered.filter(q => q.subject === quizSubject);
     }
     if (quizTag !== 'Todos') {
-      filtered = filtered.filter(q => q.tags.includes(quizTag));
+      filtered = filtered.filter(q => q.tags && Array.isArray(q.tags) && q.tags.includes(quizTag));
     }
 
     if (filtered.length === 0) {
@@ -705,20 +775,24 @@ export default function App() {
         const data = JSON.parse(content);
         
         if (data.questions && Array.isArray(data.questions)) {
-          setQuestions(data.questions);
+          // Validate questions
+          const validQuestions = data.questions.filter((q: any) => q && q.id && q.text);
+          setQuestions(validQuestions);
         }
         if (data.attempts && Array.isArray(data.attempts)) {
-          setAttempts(data.attempts);
+          // Validate attempts
+          const validAttempts = data.attempts.filter((a: any) => a && a.id && a.questionId);
+          setAttempts(validAttempts);
         }
         if (data.profile) {
-          if (data.profile.userName !== undefined) setUserName(data.profile.userName);
+          if (data.profile.userName !== undefined) setUserName(data.profile.userName || 'Usuário');
           if (data.profile.userPhoto !== undefined) setUserPhoto(data.profile.userPhoto);
           if (data.profile.bgImage !== undefined) setBgImage(data.profile.bgImage);
-          if (data.profile.primaryColor !== undefined) setPrimaryColor(data.profile.primaryColor);
-          if (data.profile.secondaryColor !== undefined) setSecondaryColor(data.profile.secondaryColor);
-          if (data.profile.accentColor !== undefined) setAccentColor(data.profile.accentColor);
-          if (data.profile.statsColor !== undefined) setStatsColor(data.profile.statsColor);
-          if (data.profile.statsBgColor !== undefined) setStatsBgColor(data.profile.statsBgColor);
+          if (data.profile.primaryColor !== undefined) setPrimaryColor(data.profile.primaryColor || '#db2777');
+          if (data.profile.secondaryColor !== undefined) setSecondaryColor(data.profile.secondaryColor || '#fce4ec');
+          if (data.profile.accentColor !== undefined) setAccentColor(data.profile.accentColor || '#be185d');
+          if (data.profile.statsColor !== undefined) setStatsColor(data.profile.statsColor || '#db2777');
+          if (data.profile.statsBgColor !== undefined) setStatsBgColor(data.profile.statsBgColor || '#ffffff');
         }
         
         alert('Dados importados com sucesso!');
@@ -1322,11 +1396,12 @@ export default function App() {
 
   const renderQuestionBank = () => {
     const filteredQuestions = questions.filter(q => {
+      if (!q) return false;
       const matchesSubject = bankSubject === 'Todas' || q.subject === bankSubject;
       const matchesStatus = bankStatus === 'all' || q.lastResult === bankStatus;
-      const matchesSearch = q.text.toLowerCase().includes(bankSearch.toLowerCase()) || 
-                           q.subject.toLowerCase().includes(bankSearch.toLowerCase()) ||
-                           q.tags.some(t => t.toLowerCase().includes(bankSearch.toLowerCase()));
+      const matchesSearch = (q.text || '').toLowerCase().includes(bankSearch.toLowerCase()) || 
+                           (q.subject || '').toLowerCase().includes(bankSearch.toLowerCase()) ||
+                           (q.tags || []).some(t => t && t.toLowerCase().includes(bankSearch.toLowerCase()));
       return matchesSubject && matchesStatus && matchesSearch;
     });
 
