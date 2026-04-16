@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Download, Star, ChevronLeft, ChevronRight, User, Plus, X, Image as ImageIcon, Upload, ArrowLeft, Tag, Play, CheckCircle2, Timer, Clock, AlertCircle, BarChart3, TrendingUp, Target, Heart, Pencil, Trash2, RefreshCcw } from 'lucide-react';
+import { Download, Star, ChevronLeft, ChevronRight, User, Plus, X, Image as ImageIcon, Upload, ArrowLeft, Tag, Play, CheckCircle2, Timer, Clock, AlertCircle, BarChart3, TrendingUp, Target, Heart, Pencil, Trash2, RefreshCcw, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, ReactNode, useRef, KeyboardEvent, ChangeEvent, useEffect, useMemo, Component, ErrorInfo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { compressImage } from './imageUtils';
+import { saveQuestions, loadQuestions, saveAttempts, loadAttempts, saveAllSettings, loadAllSettings, migrateFromLocalStorage } from './storage';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -31,14 +33,13 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
           <p className="text-gray-600 mb-6">Ocorreu um erro inesperado ao carregar as informações.</p>
           <button
             onClick={() => {
-              localStorage.clear();
               window.location.reload();
             }}
             className="px-6 py-3 bg-rose-500 text-white rounded-xl font-bold shadow-lg hover:bg-rose-600 transition-colors flex items-center gap-2"
           >
-            <RefreshCcw className="w-5 h-5" /> Limpar Dados e Recarregar
+            <RefreshCcw className="w-5 h-5" /> Recarregar Aplicativo
           </button>
-          <p className="mt-4 text-xs text-gray-400">Isso pode acontecer se os dados importados forem inválidos ou excederem o limite de memória.</p>
+          <p className="mt-4 text-xs text-gray-400">Seus dados estão seguros. Se o problema persistir, exporte seus dados pela tela principal.</p>
         </div>
       );
     }
@@ -91,75 +92,78 @@ export default function AppWrapper() {
 function App() {
   const [currentView, setCurrentView] = useState<View>('home');
   const [currentIndex, setCurrentIndex] = useState(1);
-  const [questions, setQuestions] = useState<Question[]>(() => {
-    const saved = localStorage.getItem('vestibular_questions');
-    try {
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      console.error("Error parsing questions from localStorage", e);
-      return [];
-    }
-  });
-  const [attempts, setAttempts] = useState<Attempt[]>(() => {
-    const saved = localStorage.getItem('vestibular_attempts');
-    try {
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      console.error("Error parsing attempts from localStorage", e);
-      return [];
-    }
-  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [attempts, setAttempts] = useState<Attempt[]>([]);
 
   // Profile State
-  const [userName, setUserName] = useState(() => localStorage.getItem('vestibular_userName') || 'Rodrigo Aschidamini João');
-  const [userPhoto, setUserPhoto] = useState<string | null>(() => localStorage.getItem('vestibular_userPhoto'));
-  const [bgImage, setBgImage] = useState<string | null>(() => localStorage.getItem('vestibular_bgImage'));
-  const [primaryColor, setPrimaryColor] = useState(() => localStorage.getItem('vestibular_primaryColor') || '#db2777');
-  const [secondaryColor, setSecondaryColor] = useState(() => localStorage.getItem('vestibular_secondaryColor') || '#fce4ec');
-  const [accentColor, setAccentColor] = useState(() => localStorage.getItem('vestibular_accentColor') || '#be185d');
-  const [statsColor, setStatsColor] = useState(() => localStorage.getItem('vestibular_statsColor') || '#db2777');
-  const [statsBgColor, setStatsBgColor] = useState(() => localStorage.getItem('vestibular_statsBgColor') || '#ffffff');
+  const [userName, setUserName] = useState('Rodrigo Aschidamini João');
+  const [userPhoto, setUserPhoto] = useState<string | null>(null);
+  const [bgImage, setBgImage] = useState<string | null>(null);
+  const [primaryColor, setPrimaryColor] = useState('#db2777');
+  const [secondaryColor, setSecondaryColor] = useState('#fce4ec');
+  const [accentColor, setAccentColor] = useState('#be185d');
+  const [statsColor, setStatsColor] = useState('#db2777');
+  const [statsBgColor, setStatsBgColor] = useState('#ffffff');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  
-  // Persistence Effect
+
+  // Load data from IndexedDB on mount
   useEffect(() => {
-    try {
-      localStorage.setItem('vestibular_questions', JSON.stringify(questions));
-    } catch (e) {
-      console.error("Failed to save questions to localStorage", e);
-    }
-  }, [questions]);
+    const loadData = async () => {
+      try {
+        await migrateFromLocalStorage();
+        const [loadedQuestions, loadedAttempts, settings] = await Promise.all([
+          loadQuestions(),
+          loadAttempts(),
+          loadAllSettings()
+        ]);
+        setQuestions(loadedQuestions);
+        setAttempts(loadedAttempts);
+        if (settings.userName) setUserName(settings.userName);
+        if (settings.userPhoto) setUserPhoto(settings.userPhoto);
+        if (settings.bgImage) setBgImage(settings.bgImage);
+        if (settings.primaryColor) setPrimaryColor(settings.primaryColor);
+        if (settings.secondaryColor) setSecondaryColor(settings.secondaryColor);
+        if (settings.accentColor) setAccentColor(settings.accentColor);
+        if (settings.statsColor) setStatsColor(settings.statsColor);
+        if (settings.statsBgColor) setStatsBgColor(settings.statsBgColor);
+      } catch (error) {
+        console.error('Failed to load data:', error);
+        setSaveError('Erro ao carregar dados. Tente recarregar a página.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  // Persistence Effects - Save to IndexedDB
+  useEffect(() => {
+    if (isLoading) return;
+    saveQuestions(questions).catch(e => {
+      console.error('Failed to save questions:', e);
+      setSaveError('Erro ao salvar questões. Suas alterações podem não ter sido salvas.');
+    });
+  }, [questions, isLoading]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('vestibular_attempts', JSON.stringify(attempts));
-    } catch (e) {
-      console.error("Failed to save attempts to localStorage", e);
-    }
-  }, [attempts]);
+    if (isLoading) return;
+    saveAttempts(attempts).catch(e => {
+      console.error('Failed to save attempts:', e);
+    });
+  }, [attempts, isLoading]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('vestibular_userName', userName);
-      if (userPhoto) {
-        localStorage.setItem('vestibular_userPhoto', userPhoto);
-      } else {
-        localStorage.removeItem('vestibular_userPhoto');
-      }
-      if (bgImage) {
-        localStorage.setItem('vestibular_bgImage', bgImage);
-      } else {
-        localStorage.removeItem('vestibular_bgImage');
-      }
-      localStorage.setItem('vestibular_primaryColor', primaryColor);
-      localStorage.setItem('vestibular_secondaryColor', secondaryColor);
-      localStorage.setItem('vestibular_accentColor', accentColor);
-      localStorage.setItem('vestibular_statsColor', statsColor);
-      localStorage.setItem('vestibular_statsBgColor', statsBgColor);
-    } catch (e) {
-      console.error("Failed to save profile to localStorage", e);
-    }
-  }, [userName, userPhoto, bgImage, primaryColor, secondaryColor, accentColor, statsColor, statsBgColor]);
+    if (isLoading) return;
+    saveAllSettings({
+      userName, userPhoto, bgImage,
+      primaryColor, secondaryColor, accentColor,
+      statsColor, statsBgColor,
+    }).catch(e => {
+      console.error('Failed to save settings:', e);
+    });
+  }, [userName, userPhoto, bgImage, primaryColor, secondaryColor, accentColor, statsColor, statsBgColor, isLoading]);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--primary-color', primaryColor);
@@ -310,14 +314,7 @@ function App() {
   };
 
   const processImage = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        resolve(event.target?.result as string);
-      };
-      reader.onerror = reject;
-    });
+    return compressImage(file, 1200, 0.7);
   };
 
   const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -627,16 +624,8 @@ function App() {
     setAccentColor('#be185d');
     setStatsColor('#db2777');
     setStatsBgColor('#ffffff');
-    
-    localStorage.removeItem('vestibular_userName');
-    localStorage.removeItem('vestibular_userPhoto');
-    localStorage.removeItem('vestibular_bgImage');
-    localStorage.removeItem('vestibular_primaryColor');
-    localStorage.removeItem('vestibular_secondaryColor');
-    localStorage.removeItem('vestibular_accentColor');
-    localStorage.removeItem('vestibular_statsColor');
-    localStorage.removeItem('vestibular_statsBgColor');
     setShowResetConfirm(false);
+    // Settings will be saved automatically via the useEffect
   };
 
   const clearForm = () => {
@@ -679,7 +668,12 @@ function App() {
     }
 
     // Shuffle and pick up to 10
-    const shuffled = filtered.sort(() => 0.5 - Math.random());
+    // Fisher-Yates shuffle for uniform distribution
+    const shuffled = [...filtered];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
     setDrawnQuestions(shuffled.slice(0, 10));
   };
 
@@ -753,11 +747,11 @@ function App() {
       },
       exportDate: new Date().toISOString(),
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'text/plain' });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `vestibular_data_${new Date().toISOString().split('T')[0]}.txt`;
+    link.download = `vestibular_data_${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -776,7 +770,7 @@ function App() {
         
         if (data.questions && Array.isArray(data.questions)) {
           // Validate questions
-          const validQuestions = data.questions.filter((q: any) => q && q.id && q.text);
+          const validQuestions = data.questions.filter((q: any) => q && q.id && (q.text || q.imageUrl));
           setQuestions(validQuestions);
         }
         if (data.attempts && Array.isArray(data.attempts)) {
@@ -1544,7 +1538,7 @@ function App() {
   const renderPerformance = () => {
     const filteredAttempts = attempts.filter(a => {
       const matchesSubject = perfSubject === 'Todas' || a.subject === perfSubject;
-      const matchesTag = perfTag === 'Todos' || a.tags.includes(perfTag);
+      const matchesTag = perfTag === 'Todos' || (a.tags && Array.isArray(a.tags) && a.tags.includes(perfTag));
       return matchesSubject && matchesTag;
     });
 
@@ -1679,6 +1673,21 @@ function App() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center" style={{ backgroundColor: '#fce4ec' }}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center gap-4"
+        >
+          <Loader2 className="w-12 h-12 text-pink-500 animate-spin" />
+          <p className="text-lg font-medium text-pink-600">Carregando seus dados...</p>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div 
       className="min-h-screen font-sans text-[#1a1a1a] flex flex-col items-center py-8 px-4 relative"
@@ -1690,6 +1699,19 @@ function App() {
         backgroundAttachment: 'fixed'
       }}
     >
+      {saveError && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-rose-500 text-white rounded-xl shadow-2xl flex items-center gap-3 max-w-md"
+        >
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <span className="text-sm font-medium">{saveError}</span>
+          <button onClick={() => setSaveError(null)} className="ml-2 hover:bg-rose-600 rounded-full p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </motion.div>
+      )}
       <AnimatePresence mode="wait">
         {renderCurrentView()}
       </AnimatePresence>
