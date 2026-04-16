@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Download, Star, ChevronLeft, ChevronRight, User, Plus, X, Image as ImageIcon, Upload, ArrowLeft, Tag, Play, CheckCircle2, Timer, Clock, AlertCircle, BarChart3, TrendingUp, Target, Heart, Pencil, Trash2, RefreshCcw, Loader2 } from 'lucide-react';
+import { Download, Star, ChevronLeft, ChevronRight, User, Plus, X, Image as ImageIcon, Upload, ArrowLeft, Tag, Play, CheckCircle2, Timer, Clock, AlertCircle, BarChart3, TrendingUp, Target, Heart, Pencil, Trash2, RefreshCcw, Loader2, Check, Shield } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useState, ReactNode, useRef, KeyboardEvent, ChangeEvent, useEffect, useMemo, Component, ErrorInfo } from 'react';
+import { useState, ReactNode, useRef, KeyboardEvent, ChangeEvent, useEffect, useMemo, Component, ErrorInfo, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { compressImage } from './imageUtils';
 import { saveQuestions, loadQuestions, saveAttempts, loadAttempts, saveAllSettings, loadAllSettings, migrateFromLocalStorage } from './storage';
@@ -66,6 +66,7 @@ interface Question {
   tags: string[];
   createdAt: number;
   lastResult?: 'correct' | 'incorrect';
+  reviewCount?: number;
   resolution?: string;
   resolutionImageUrl?: string;
 }
@@ -79,7 +80,13 @@ interface Attempt {
   tags: string[];
 }
 
-type View = 'home' | 'add-question' | 'take-quiz' | 'quiz-session' | 'question-bank' | 'performance' | 'edit-profile';
+type View = 'home' | 'add-question' | 'take-quiz' | 'quiz-session' | 'quiz-results' | 'question-bank' | 'performance' | 'edit-profile';
+
+interface Toast {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+}
 
 export default function AppWrapper() {
   return (
@@ -94,8 +101,18 @@ function App() {
   const [currentIndex, setCurrentIndex] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
+
+  // Toast system
+  const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+    const id = Date.now().toString();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  }, []);
 
   // Profile State
   const [userName, setUserName] = useState('Rodrigo Aschidamini João');
@@ -128,6 +145,15 @@ function App() {
         if (settings.accentColor) setAccentColor(settings.accentColor);
         if (settings.statsColor) setStatsColor(settings.statsColor);
         if (settings.statsBgColor) setStatsBgColor(settings.statsBgColor);
+
+        // Check if backup reminder is needed (every 7 days)
+        const lastBackup = settings.lastBackupReminder;
+        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+        if (!lastBackup || (Date.now() - Number(lastBackup)) > sevenDaysMs) {
+          setTimeout(() => {
+            showToast('🛡️ Lembrete: faça um backup! Exporte seus dados pela tela principal.', 'info');
+          }, 3000);
+        }
       } catch (error) {
         console.error('Failed to load data:', error);
         setSaveError('Erro ao carregar dados. Tente recarregar a página.');
@@ -206,6 +232,7 @@ function App() {
   const [isCorrected, setIsCorrected] = useState(false);
   const [showResolution, setShowResolution] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [quizResults, setQuizResults] = useState<{ question: Question; result: 'correct' | 'incorrect' }[]>([]);
 
   // Bank Filter State
   const [bankSubject, setBankSubject] = useState('Todas');
@@ -286,6 +313,36 @@ function App() {
   const nextStat = () => setCurrentIndex((prev) => (prev + 1) % stats.length);
   const prevStat = () => setCurrentIndex((prev) => (prev - 1 + stats.length) % stats.length);
 
+  // handleCorrect wrapped in useCallback to avoid stale closure in timer
+  const handleCorrect = useCallback(() => {
+    const currentQuestion = drawnQuestions[currentQuizIndex];
+    if (!currentQuestion) return;
+    const isCorrect = selectedQuizOption === currentQuestion.answer;
+    
+    setIsCorrected(true);
+
+    // Record attempt
+    const newAttempt: Attempt = {
+      id: Date.now().toString(),
+      questionId: currentQuestion.id,
+      result: isCorrect ? 'correct' : 'incorrect',
+      timestamp: Date.now(),
+      subject: currentQuestion.subject,
+      tags: currentQuestion.tags
+    };
+    setAttempts(prev => [...prev, newAttempt]);
+
+    // Update question status + increment review count
+    setQuestions(prev => prev.map(q => 
+      q.id === currentQuestion.id 
+        ? { ...q, lastResult: isCorrect ? 'correct' : 'incorrect', reviewCount: (q.reviewCount || 0) + 1 } 
+        : q
+    ));
+
+    // Store result for quiz summary
+    setQuizResults(prev => [...prev, { question: currentQuestion, result: isCorrect ? 'correct' : 'incorrect' }]);
+  }, [drawnQuestions, currentQuizIndex, selectedQuizOption]);
+
   // Timer logic
   useEffect(() => {
     let interval: any;
@@ -294,10 +351,10 @@ function App() {
         setTimeLeft((prev) => prev - 1);
       }, 1000);
     } else if (timeLeft === 0 && useTimer && currentView === 'quiz-session' && !isCorrected) {
-      handleCorrect(); // Auto-correct on timeout
+      handleCorrect();
     }
     return () => clearInterval(interval);
-  }, [currentView, useTimer, timeLeft, isCorrected]);
+  }, [currentView, useTimer, timeLeft, isCorrected, handleCorrect]);
 
   const handleAddTag = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && tagInput.trim()) {
@@ -325,7 +382,7 @@ function App() {
         setImagePreview(processedBase64);
       } catch (error) {
         console.error("Error processing image:", error);
-        alert("Erro ao processar a imagem.");
+        showToast('Erro ao processar a imagem.', 'error');
       }
     }
   };
@@ -338,7 +395,7 @@ function App() {
         setBgImage(processedBase64);
       } catch (error) {
         console.error("Error processing background image:", error);
-        alert("Erro ao processar a imagem de fundo.");
+        showToast('Erro ao processar a imagem de fundo.', 'error');
       }
     }
   };
@@ -351,7 +408,7 @@ function App() {
         setUserPhoto(processedBase64);
       } catch (error) {
         console.error("Error processing profile photo:", error);
-        alert("Erro ao processar a foto de perfil.");
+        showToast('Erro ao processar a foto de perfil.', 'error');
       }
     }
   };
@@ -364,7 +421,7 @@ function App() {
         setResolutionImagePreview(processedBase64);
       } catch (error) {
         console.error("Error processing resolution image:", error);
-        alert("Erro ao processar a imagem da resolução.");
+        showToast('Erro ao processar a imagem da resolução.', 'error');
       }
     }
   };
@@ -568,7 +625,7 @@ function App() {
 
   const handleSubmit = () => {
     if (!questionText.trim() && !imagePreview) {
-      alert("Por favor, insira o texto da questão ou uma imagem.");
+      showToast('Por favor, insira o texto da questão ou uma imagem.', 'warning');
       return;
     }
 
@@ -612,6 +669,7 @@ function App() {
     setSelectedSubject('Matemática');
     setTags([]);
     setImagePreview(null);
+    showToast(editingQuestionId ? 'Questão atualizada com sucesso! ✏️' : 'Questão salva com sucesso! 🎉', 'success');
     setCurrentView('home');
   };
 
@@ -663,7 +721,7 @@ function App() {
     }
 
     if (filtered.length === 0) {
-      alert("Nenhuma questão encontrada com esses filtros.");
+      showToast('Nenhuma questão encontrada com esses filtros.', 'warning');
       return;
     }
 
@@ -679,7 +737,7 @@ function App() {
 
   const startQuiz = () => {
     if (drawnQuestions.length === 0) {
-      alert("Sorteie as questões primeiro!");
+      showToast('Sorteie as questões primeiro!', 'warning');
       return;
     }
     setCurrentQuizIndex(0);
@@ -689,33 +747,11 @@ function App() {
     if (useTimer) {
       setTimeLeft(timerMinutes * 60);
     }
+    setQuizResults([]);
     setCurrentView('quiz-session');
   };
 
-  const handleCorrect = () => {
-    const currentQuestion = drawnQuestions[currentQuizIndex];
-    const isCorrect = selectedQuizOption === currentQuestion.answer;
-    
-    setIsCorrected(true);
-
-    // Record attempt
-    const newAttempt: Attempt = {
-      id: Date.now().toString(),
-      questionId: currentQuestion.id,
-      result: isCorrect ? 'correct' : 'incorrect',
-      timestamp: Date.now(),
-      subject: currentQuestion.subject,
-      tags: currentQuestion.tags
-    };
-    setAttempts(prev => [...prev, newAttempt]);
-
-    // Update question status in the main list
-    setQuestions(prev => prev.map(q => 
-      q.id === currentQuestion.id 
-        ? { ...q, lastResult: isCorrect ? 'correct' : 'incorrect' } 
-        : q
-    ));
-  };
+  // handleCorrect is defined above via useCallback
 
   const nextQuestion = () => {
     if (currentQuizIndex < drawnQuestions.length - 1) {
@@ -727,7 +763,8 @@ function App() {
         setTimeLeft(timerMinutes * 60);
       }
     } else {
-      setCurrentView('home');
+      // Quiz finished - show results
+      setCurrentView('quiz-results');
     }
   };
 
@@ -756,6 +793,14 @@ function App() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    // Record backup timestamp to reset the 7-day reminder
+    saveAllSettings({
+      userName, userPhoto, bgImage,
+      primaryColor, secondaryColor, accentColor,
+      statsColor, statsBgColor,
+      lastBackupReminder: Date.now(),
+    }).catch(() => {});
+    showToast('Dados exportados com sucesso! 💾', 'success');
   };
 
   const handleImportData = (e: ChangeEvent<HTMLInputElement>) => {
@@ -789,10 +834,10 @@ function App() {
           if (data.profile.statsBgColor !== undefined) setStatsBgColor(data.profile.statsBgColor || '#ffffff');
         }
         
-        alert('Dados importados com sucesso!');
+        showToast('Dados importados com sucesso! 📥', 'success');
       } catch (error) {
         console.error('Erro ao importar dados:', error);
-        alert('Erro ao ler o arquivo. Certifique-se de que é um arquivo de dados válido.');
+        showToast('Erro ao ler o arquivo. Certifique-se de que é um arquivo de dados válido.', 'error');
       }
     };
     reader.readAsText(file);
@@ -1485,7 +1530,14 @@ function App() {
                   ))}
                 </div>
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                  <span className="text-xs font-bold text-gray-400">Gabarito: {q.answer}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-400">Gabarito: {q.answer}</span>
+                    {(q.reviewCount || 0) > 0 && (
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}>
+                        {q.reviewCount}x revisada
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1">
                     <button 
                       onClick={() => handleEditQuestion(q)}
@@ -1660,12 +1712,86 @@ function App() {
     );
   };
 
+  const renderQuizResults = () => {
+    const correctResults = quizResults.filter(r => r.result === 'correct').length;
+    const totalResults = quizResults.length;
+    const percentage = totalResults > 0 ? Math.round((correctResults / totalResults) * 100) : 0;
+    const incorrectResults = quizResults.filter(r => r.result === 'incorrect');
+
+    return (
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="w-full max-w-4xl glass-card rounded-3xl p-8">
+        <div className="flex flex-col items-center text-center mb-8">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', delay: 0.2 }}
+            className="w-28 h-28 rounded-full flex items-center justify-center mb-6 shadow-xl"
+            style={{ backgroundColor: percentage >= 70 ? '#10b981' : percentage >= 40 ? '#f59e0b' : '#f43f5e' }}
+          >
+            <span className="text-4xl font-bold text-white">{percentage}%</span>
+          </motion.div>
+          <h2 className="text-3xl font-romantic font-bold mb-2" style={{ color: accentColor }}>
+            {percentage >= 70 ? 'Parabéns! 🎉' : percentage >= 40 ? 'Bom esforço! 💪' : 'Continue estudando! 📚'}
+          </h2>
+          <p className="text-gray-500 text-lg">
+            Você acertou <strong className="text-emerald-600">{correctResults}</strong> de <strong>{totalResults}</strong> questões
+          </p>
+        </div>
+
+        {incorrectResults.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: accentColor }}>
+              <AlertCircle className="w-5 h-5 text-rose-500" /> Questões que você errou
+            </h3>
+            <div className="space-y-3">
+              {incorrectResults.map((r, idx) => (
+                <div key={idx} className="p-4 bg-rose-50/80 rounded-xl border border-rose-100">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-rose-400">{r.question.subject}</span>
+                      <p className="text-sm text-gray-700 mt-1 line-clamp-2">{r.question.text || 'Questão baseada em imagem'}</p>
+                    </div>
+                    <span className="text-xs font-bold px-2 py-1 bg-emerald-100 text-emerald-600 rounded-md shrink-0">
+                      Gabarito: {r.question.answer}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <motion.button
+            onClick={() => { setCurrentView('take-quiz'); setDrawnQuestions([]); setQuizResults([]); }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="flex-1 py-4 border-2 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-2"
+            style={{ color: primaryColor, borderColor: primaryColor }}
+          >
+            <RefreshCcw className="w-5 h-5" /> Novo Quiz
+          </motion.button>
+          <motion.button
+            onClick={() => { setCurrentView('home'); setQuizResults([]); }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="flex-1 py-4 text-white rounded-2xl font-bold text-lg shadow-xl transition-all flex items-center justify-center gap-2"
+            style={{ backgroundColor: primaryColor }}
+          >
+            <Heart className="w-5 h-5" /> Voltar ao Início
+          </motion.button>
+        </div>
+      </motion.div>
+    );
+  };
+
   const renderCurrentView = () => {
     switch (currentView) {
       case 'home': return renderHome();
       case 'add-question': return renderAddQuestion();
       case 'take-quiz': return renderTakeQuiz();
       case 'quiz-session': return renderQuizSession();
+      case 'quiz-results': return renderQuizResults();
       case 'question-bank': return renderQuestionBank();
       case 'performance': return renderPerformance();
       case 'edit-profile': return renderEditProfile();
@@ -1715,6 +1841,34 @@ function App() {
       <AnimatePresence mode="wait">
         {renderCurrentView()}
       </AnimatePresence>
+      {/* Toast Overlay */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-sm">
+        <AnimatePresence>
+          {toasts.map(toast => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, x: 80, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 80, scale: 0.9 }}
+              className={`px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-medium backdrop-blur-md ${
+                toast.type === 'success' ? 'bg-emerald-500 text-white' :
+                toast.type === 'error' ? 'bg-rose-500 text-white' :
+                toast.type === 'warning' ? 'bg-amber-500 text-white' :
+                'bg-white/90 text-gray-800 border border-gray-100'
+              }`}
+            >
+              {toast.type === 'success' && <Check className="w-4 h-4 flex-shrink-0" />}
+              {toast.type === 'error' && <X className="w-4 h-4 flex-shrink-0" />}
+              {toast.type === 'warning' && <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+              {toast.type === 'info' && <Shield className="w-4 h-4 flex-shrink-0" />}
+              <span>{toast.message}</span>
+              <button onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} className="ml-1 hover:opacity-70 transition-opacity">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
       <div className="h-12"></div>
     </div>
   );
