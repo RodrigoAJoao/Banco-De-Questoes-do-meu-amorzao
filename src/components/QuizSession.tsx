@@ -1,7 +1,10 @@
+import { useState, useEffect, useRef } from 'react';
+import type { ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Clock, CheckCircle2, ChevronRight, Heart, Star } from 'lucide-react';
+import { X, Clock, CheckCircle2, ChevronRight, Heart, Star, Plus, Lightbulb } from 'lucide-react';
 import type { Question, View, ErrorReason } from '../types';
 import ErrorReasonSelector from './ErrorReasonSelector';
+import { compressImage } from '../imageUtils';
 
 interface QuizSessionProps {
   currentQuestion: Question;
@@ -16,6 +19,7 @@ interface QuizSessionProps {
   onExit: () => void;
   errorReason: ErrorReason | undefined;
   onErrorReasonChange: (v: ErrorReason | undefined) => void;
+  onSaveResolution: (text: string, images: string[]) => void;
   primaryColor: string; accentColor: string;
   answers: string[];
   formatTime: (s: number) => string;
@@ -28,6 +32,38 @@ export default function QuizSession(p: QuizSessionProps) {
     : (q.resolutionImageUrl ? [q.resolutionImageUrl] : []);
   const hasResolution = !!q.resolution || resolutionImages.length > 0;
   const isWrong = p.isCorrected && p.selectedQuizOption !== q.answer;
+
+  // ─── Editor de resolução durante a revisão (para questões sem resolução) ───
+  const [addingResolution, setAddingResolution] = useState(false);
+  const [resText, setResText] = useState('');
+  const [resImages, setResImages] = useState<string[]>([]);
+  const resFileRef = useRef<HTMLInputElement>(null);
+
+  // Reseta o editor sempre que muda a questão.
+  useEffect(() => {
+    setAddingResolution(false);
+    setResText('');
+    setResImages([]);
+  }, [q.id]);
+
+  const onPickResolutionImages = async (e: ChangeEvent<HTMLInputElement>) => {
+    const fl = e.target.files;
+    if (!fl || fl.length === 0) return;
+    const files: File[] = [];
+    for (let i = 0; i < fl.length; i++) files.push(fl[i]);
+    try {
+      const processed = await Promise.all(files.map(f => compressImage(f, 1200, 0.7)));
+      setResImages(prev => [...prev, ...processed]);
+    } catch { /* ignora imagem inválida */ }
+    if (e.target) e.target.value = '';
+  };
+
+  const saveResolution = () => {
+    if (!resText.trim() && resImages.length === 0) return;
+    p.onSaveResolution(resText, resImages);
+    setAddingResolution(false);
+  };
+
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-4xl glass-card rounded-3xl p-8">
       <div className="flex items-center justify-between mb-8">
@@ -123,6 +159,56 @@ export default function QuizSession(p: QuizSessionProps) {
                   Próxima Questão <ChevronRight className="w-6 h-6" />
                 </motion.button>
               </div>
+
+              {/* Esta questão não tem resolução cadastrada — permite adicioná-la durante a revisão. */}
+              {!hasResolution && (
+                <div>
+                  {!addingResolution ? (
+                    <motion.button onClick={() => setAddingResolution(true)} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} className="w-full py-3 border-2 border-dashed rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all" style={{ color: p.primaryColor, borderColor: `${p.primaryColor}50`, backgroundColor: `${p.primaryColor}08` }}>
+                      <Plus className="w-4 h-4" /> Adicionar resolução a esta questão
+                    </motion.button>
+                  ) : (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-5 bg-white/80 rounded-2xl border-2" style={{ borderColor: `${p.primaryColor}40` }}>
+                      <h4 className="font-bold text-base mb-3 flex items-center gap-2" style={{ color: p.accentColor }}>
+                        <Lightbulb className="w-5 h-5" style={{ color: p.primaryColor }} /> Nova Resolução
+                      </h4>
+                      <textarea
+                        value={resText}
+                        onChange={(e) => setResText(e.target.value)}
+                        placeholder="Escreva a resolução comentada (opcional se anexar imagens)..."
+                        className="w-full h-28 p-3 bg-white/70 border rounded-xl focus:ring-2 outline-none resize-none text-sm"
+                        style={{ borderColor: `${p.primaryColor}20`, '--tw-ring-color': p.primaryColor } as any}
+                      />
+                      {resImages.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2 mt-3">
+                          {resImages.map((img, idx) => (
+                            <div key={idx} className="relative rounded-lg overflow-hidden border" style={{ borderColor: `${p.primaryColor}30` }}>
+                              <img src={img} alt={`Resolução ${idx + 1}`} className="w-full h-20 object-cover" />
+                              <button type="button" onClick={() => setResImages(prev => prev.filter((_, i) => i !== idx))} className="absolute top-1 right-1 bg-rose-500 text-white rounded-full p-1 shadow-md hover:bg-rose-600 transition-colors">
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 mt-3">
+                        <button type="button" onClick={() => resFileRef.current?.click()} className="flex-1 py-2.5 border-2 border-dashed rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors" style={{ color: p.primaryColor, borderColor: `${p.primaryColor}40` }}>
+                          <Plus className="w-4 h-4" /> {resImages.length > 0 ? 'Mais imagens' : 'Anexar imagens'}
+                        </button>
+                        <input type="file" ref={resFileRef} onChange={onPickResolutionImages} accept="image/*" multiple className="hidden" />
+                      </div>
+                      <div className="flex gap-2 mt-3">
+                        <button type="button" onClick={() => { setAddingResolution(false); setResText(''); setResImages([]); }} className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-white border transition-colors hover:bg-gray-50" style={{ borderColor: `${p.primaryColor}20`, color: p.accentColor }}>
+                          Cancelar
+                        </button>
+                        <button type="button" onClick={saveResolution} disabled={!resText.trim() && resImages.length === 0} className={`flex-[2] py-2.5 rounded-xl text-sm font-bold text-white transition-all ${(!resText.trim() && resImages.length === 0) ? 'opacity-50 cursor-not-allowed' : ''}`} style={{ backgroundColor: p.primaryColor }}>
+                          Salvar Resolução
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </div>
+              )}
 
               <AnimatePresence>
                 {p.showResolution && (

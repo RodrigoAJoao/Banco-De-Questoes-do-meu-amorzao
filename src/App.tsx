@@ -373,6 +373,20 @@ function App() {
     }
   };
 
+  // Adiciona/salva a resolução da questão atual durante a revisão (para questões sem resolução).
+  const handleSaveReviewResolution = (text: string, images: string[]) => {
+    const currentQuestion = drawnQuestions[currentQuizIndex];
+    if (!currentQuestion) return;
+    const patch = {
+      resolution: text.trim() ? text : undefined,
+      resolutionImageUrls: images,
+      resolutionImageUrl: undefined,
+    };
+    setQuestions(prev => prev.map(q => q.id === currentQuestion.id ? { ...q, ...patch } : q));
+    setDrawnQuestions(prev => prev.map((q, i) => i === currentQuizIndex ? { ...q, ...patch } : q));
+    showToast('Resolução adicionada à questão! 💡', 'success');
+  };
+
   const nextQuestion = () => {
     if (currentQuizIndex < drawnQuestions.length - 1) {
       setCurrentQuizIndex(prev => prev + 1); setSelectedQuizOption(null); setIsCorrected(false); setShowResolution(false);
@@ -463,7 +477,7 @@ function App() {
         return <TakeQuiz quizSubjects={quizSubjects} setQuizSubjects={setQuizSubjects} quizTags={quizTags} setQuizTags={setQuizTags} availableTags={quizAvailableTags} quizWrongCount={quizWrongCount} setQuizWrongCount={setQuizWrongCount} quizRightCount={quizRightCount} setQuizRightCount={setQuizRightCount} quizNewCount={quizNewCount} setQuizNewCount={setQuizNewCount} counts={quizCounts} useTimer={useTimer} setUseTimer={setUseTimer} timerMinutes={timerMinutes} setTimerMinutes={setTimerMinutes} drawnQuestions={drawnQuestions} onDraw={handleDrawQuestions} onStart={startQuiz} onNavigate={setCurrentView} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} />;
       case 'quiz-session':
         const currentQ = drawnQuestions[currentQuizIndex];
-        return currentQ ? <QuizSession currentQuestion={currentQ} currentQuizIndex={currentQuizIndex} totalQuestions={drawnQuestions.length} selectedQuizOption={selectedQuizOption} setSelectedQuizOption={setSelectedQuizOption} isCorrected={isCorrected} showResolution={showResolution} setShowResolution={setShowResolution} useTimer={useTimer} timeLeft={timeLeft} onCorrect={handleCorrect} onNext={nextQuestion} onExit={() => setCurrentView('take-quiz')} errorReason={currentErrorReason} onErrorReasonChange={handleSetQuizErrorReason} primaryColor={primaryColor} accentColor={accentColor} answers={ANSWERS} formatTime={formatTime} /> : null;
+        return currentQ ? <QuizSession currentQuestion={currentQ} currentQuizIndex={currentQuizIndex} totalQuestions={drawnQuestions.length} selectedQuizOption={selectedQuizOption} setSelectedQuizOption={setSelectedQuizOption} isCorrected={isCorrected} showResolution={showResolution} setShowResolution={setShowResolution} useTimer={useTimer} timeLeft={timeLeft} onCorrect={handleCorrect} onNext={nextQuestion} onExit={() => setCurrentView('take-quiz')} errorReason={currentErrorReason} onErrorReasonChange={handleSetQuizErrorReason} onSaveResolution={handleSaveReviewResolution} primaryColor={primaryColor} accentColor={accentColor} answers={ANSWERS} formatTime={formatTime} /> : null;
       case 'quiz-results':
         return <QuizResults quizResults={quizResults} primaryColor={primaryColor} accentColor={accentColor} onNewQuiz={() => { setCurrentView('take-quiz'); setDrawnQuestions([]); setQuizResults([]); }} onGoHome={() => { setCurrentView('home'); setQuizResults([]); }} />;
       case 'question-bank':
