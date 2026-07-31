@@ -19,6 +19,8 @@ export interface Question {
   resolutionImageUrl?: string;
   resolutionImageUrls?: string[];
   errorReason?: ErrorReason;
+  /** Origem da questão quando importada de uma prova (ex.: "ENEM · 2024 · Dia 1"). */
+  source?: string;
 }
 
 export interface Attempt {
@@ -46,7 +48,7 @@ export interface Toast {
   type: 'success' | 'error' | 'info' | 'warning';
 }
 
-export type View = 'home' | 'add-question' | 'take-quiz' | 'quiz-session' | 'quiz-results' | 'question-bank' | 'performance' | 'edit-profile';
+export type View = 'home' | 'add-question' | 'take-quiz' | 'quiz-session' | 'quiz-results' | 'question-bank' | 'performance' | 'edit-profile' | 'import-prova';
 
 // ─── Constants ──────────────────────────────────────────────────
 

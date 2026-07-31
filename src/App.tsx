@@ -23,6 +23,7 @@ import QuizResults from './components/QuizResults';
 import QuestionBank from './components/QuestionBank';
 import Performance from './components/Performance';
 import EditProfile from './components/EditProfile';
+import ImportProva from './components/ImportProva';
 
 export default function AppWrapper() {
   return (
@@ -317,6 +318,14 @@ function App() {
     setErrorReason(q.errorReason); setImagePreview(q.imageUrl || null); setCurrentView('add-question');
   };
 
+  // ─── Importar Prova (PDF) ─────────────────────────────────────
+  const handleImportProva = (newQuestions: Question[]) => {
+    if (newQuestions.length === 0) return;
+    setQuestions(prev => [...newQuestions, ...prev]);
+    showToast(`${newQuestions.length} questões importadas para o banco! 📄✨`, 'success');
+    setCurrentView('question-bank');
+  };
+
   // ─── Quiz Handlers ───────────────────────────────────────────
   const shuffle = <T,>(arr: T[]): T[] => {
     const out = [...arr];
@@ -484,6 +493,8 @@ function App() {
         return <QuestionBank questions={questions} setQuestions={setQuestions as any} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} onNavigate={setCurrentView} onEditQuestion={handleEditQuestion} />;
       case 'performance':
         return <Performance attempts={attempts} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} allTags={allTags} onNavigate={setCurrentView} />;
+      case 'import-prova':
+        return <ImportProva subjects={SUBJECTS} primaryColor={primaryColor} accentColor={accentColor} onNavigate={setCurrentView} onImport={handleImportProva} />;
       case 'edit-profile':
         return <EditProfile userName={userName} setUserName={setUserName} userPhoto={userPhoto} setUserPhoto={setUserPhoto} bgImage={bgImage} setBgImage={setBgImage} primaryColor={primaryColor} setPrimaryColor={setPrimaryColor} secondaryColor={secondaryColor} setSecondaryColor={setSecondaryColor} accentColor={accentColor} setAccentColor={setAccentColor} statsColor={statsColor} setStatsColor={setStatsColor} statsBgColor={statsBgColor} setStatsBgColor={setStatsBgColor} profilePhotoInputRef={profilePhotoInputRef} bgImageInputRef={bgImageInputRef} onProfilePhotoUpload={handleProfilePhotoUpload} onBgImageUpload={handleBgImageUpload} onResetDefaults={handleResetDefaults} onNavigate={setCurrentView} />;
       default:

@@ -1,0 +1,207 @@
+import { useState, useRef, useMemo } from 'react';
+import type { ChangeEvent } from 'react';
+import { motion } from 'motion/react';
+import { ArrowLeft, FileUp, Loader2, CheckCircle2, FileText, Sparkles } from 'lucide-react';
+import type { Question, View } from '../types';
+import { ANSWERS } from '../types';
+import { extractExam } from '../pdfImport';
+import type { ExtractedQuestion } from '../pdfImport';
+
+interface ImportProvaProps {
+  subjects: string[];
+  primaryColor: string; accentColor: string;
+  onNavigate: (v: View) => void;
+  onImport: (questions: Question[]) => void;
+}
+
+interface CardState { selected: boolean; subject: string; answer: string; }
+
+export default function ImportProva(p: ImportProvaProps) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = useState<'idle' | 'processing' | 'done'>('idle');
+  const [progress, setProgress] = useState(0);
+  const [progressMsg, setProgressMsg] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [examType, setExamType] = useState('');
+  const [sourceLabel, setSourceLabel] = useState('');
+  const [questions, setQuestions] = useState<ExtractedQuestion[]>([]);
+  const [cards, setCards] = useState<CardState[]>([]);
+  const [sectionFilter, setSectionFilter] = useState<string>('Todas');
+
+  const sections = useMemo(() => Array.from(new Set(questions.map(q => q.section))).filter(Boolean), [questions]);
+
+  const handleFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    if (file) await processFile(file);
+  };
+
+  const processFile = async (file: File) => {
+    if (!/\.pdf$/i.test(file.name)) { setError('Selecione um arquivo PDF.'); return; }
+    setError(null); setStatus('processing'); setProgress(0); setProgressMsg('Abrindo PDF...');
+    setQuestions([]); setCards([]);
+    try {
+      const result = await extractExam(file, (msg, pct) => { setProgressMsg(msg); setProgress(pct); });
+      setExamType(result.examType);
+      setSourceLabel(result.suggestedSource || 'Prova importada');
+      setQuestions(result.questions);
+      setCards(result.questions.map(q => ({ selected: true, subject: q.section, answer: 'A' })));
+      setStatus('done');
+      if (result.questions.length === 0) setError('Nenhuma questão detectada automaticamente neste PDF.');
+    } catch (err) {
+      console.error(err);
+      setError('Erro ao processar o PDF. Ele pode estar protegido ou em um formato não suportado.');
+      setStatus('idle');
+    }
+  };
+
+  const visibleIdx = questions.map((_, i) => i).filter(i => sectionFilter === 'Todas' || questions[i].section === sectionFilter);
+  const selectedCount = cards.filter(c => c.selected).length;
+
+  const setAllVisible = (val: boolean) => {
+    setCards(prev => prev.map((c, i) => visibleIdx.includes(i) ? { ...c, selected: val } : c));
+  };
+  const updateCard = (i: number, patch: Partial<CardState>) => {
+    setCards(prev => prev.map((c, idx) => idx === i ? { ...c, ...patch } : c));
+  };
+
+  const doImport = () => {
+    const now = Date.now();
+    const toImport: Question[] = [];
+    questions.forEach((q, i) => {
+      if (!cards[i].selected) return;
+      toImport.push({
+        id: `${now}_${i}`,
+        text: q.text || '',
+        imageUrl: q.imageDataUrl,
+        answer: cards[i].answer,
+        subject: cards[i].subject,
+        tags: [],
+        createdAt: now + i,
+        resolutionImageUrls: [],
+        source: sourceLabel.trim() || 'Prova importada',
+      });
+    });
+    if (toImport.length === 0) return;
+    p.onImport(toImport);
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-6xl glass-card rounded-3xl p-8">
+      <div className="flex items-center mb-6">
+        <button onClick={() => p.onNavigate('home')} className="p-2 hover:bg-pink-100 rounded-full transition-colors mr-4">
+          <ArrowLeft className="w-6 h-6" style={{ color: p.primaryColor }} />
+        </button>
+        <h2 className="text-3xl font-romantic font-bold" style={{ color: p.accentColor }}>Importar Prova (PDF)</h2>
+      </div>
+
+      {status !== 'done' && (
+        <div className="flex flex-col items-center justify-center py-10">
+          <div
+            onClick={() => status !== 'processing' && fileRef.current?.click()}
+            className={`w-full max-w-xl border-2 border-dashed rounded-3xl flex flex-col items-center justify-center py-12 px-6 transition-all ${status === 'processing' ? 'opacity-70' : 'cursor-pointer hover:bg-pink-50/40'}`}
+            style={{ borderColor: `${p.primaryColor}50`, backgroundColor: `${p.primaryColor}06` }}
+          >
+            {status === 'processing' ? (
+              <>
+                <Loader2 className="w-12 h-12 mb-4 animate-spin" style={{ color: p.primaryColor }} />
+                <p className="font-bold text-lg mb-2" style={{ color: p.accentColor }}>{progressMsg}</p>
+                <div className="w-full max-w-sm h-2 bg-white/70 rounded-full overflow-hidden mt-2">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, backgroundColor: p.primaryColor }} />
+                </div>
+              </>
+            ) : (
+              <>
+                <FileUp className="w-14 h-14 mb-4" style={{ color: p.primaryColor }} />
+                <p className="font-bold text-xl mb-1" style={{ color: p.accentColor }}>Selecione o PDF da prova</p>
+                <p className="text-sm text-gray-500 text-center max-w-md">ENEM ou UFRGS. As questões serão detectadas e recortadas automaticamente (sem a redação). Você escolhe quais importar.</p>
+              </>
+            )}
+          </div>
+          <input type="file" ref={fileRef} accept="application/pdf,.pdf" onChange={handleFile} className="hidden" />
+          {error && <p className="mt-4 text-sm font-medium text-rose-600">{error}</p>}
+        </div>
+      )}
+
+      {status === 'done' && (
+        <div>
+          <div className="flex flex-col md:flex-row md:items-end gap-4 mb-5 p-4 rounded-2xl" style={{ backgroundColor: `${p.primaryColor}08` }}>
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5" style={{ color: p.primaryColor }} />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide" style={{ color: p.primaryColor }}>{examType}</p>
+                <p className="text-sm text-gray-600">{questions.length} questões detectadas</p>
+              </div>
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-semibold mb-1" style={{ color: p.accentColor }}>Origem (fica salva em cada questão)</label>
+              <input value={sourceLabel} onChange={(e) => setSourceLabel(e.target.value)} className="w-full p-2.5 bg-white/70 border rounded-xl outline-none focus:ring-2 text-sm" style={{ borderColor: `${p.primaryColor}20`, '--tw-ring-color': p.primaryColor } as any} />
+            </div>
+            <button onClick={() => { setStatus('idle'); setError(null); }} className="px-4 py-2.5 rounded-xl text-sm font-bold border transition-colors hover:bg-white" style={{ borderColor: `${p.primaryColor}30`, color: p.primaryColor }}>
+              Outro PDF
+            </button>
+          </div>
+
+          {error && <p className="mb-4 text-sm font-medium text-amber-600">{error}</p>}
+
+          {questions.length > 0 && (
+            <>
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <span className="text-xs font-bold" style={{ color: p.accentColor }}>Área:</span>
+                {['Todas', ...sections].map(s => (
+                  <button key={s} onClick={() => setSectionFilter(s)} className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${sectionFilter === s ? 'text-white shadow-sm' : 'bg-white/60'}`} style={{ backgroundColor: sectionFilter === s ? p.primaryColor : undefined, color: sectionFilter === s ? undefined : p.primaryColor }}>{s}</button>
+                ))}
+                <div className="ml-auto flex items-center gap-2">
+                  <button onClick={() => setAllVisible(true)} className="text-xs font-bold px-2.5 py-1 rounded-lg" style={{ backgroundColor: `${p.primaryColor}12`, color: p.primaryColor }}>Selecionar todas</button>
+                  <button onClick={() => setAllVisible(false)} className="text-xs font-bold px-2.5 py-1 rounded-lg bg-gray-100 text-gray-500">Limpar</button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[60vh] overflow-y-auto pr-1 pb-2">
+                {visibleIdx.map(i => {
+                  const q = questions[i];
+                  const c = cards[i];
+                  return (
+                    <div key={i} className={`rounded-2xl border-2 overflow-hidden transition-all ${c.selected ? '' : 'opacity-60'}`} style={{ borderColor: c.selected ? p.primaryColor : '#e5e7eb', backgroundColor: 'white' }}>
+                      <div className="relative">
+                        <img src={q.imageDataUrl} alt={q.label} className="w-full max-h-56 object-contain bg-white border-b" />
+                        <button onClick={() => updateCard(i, { selected: !c.selected })} className="absolute top-2 left-2 w-7 h-7 rounded-lg flex items-center justify-center shadow-md transition-colors" style={{ backgroundColor: c.selected ? p.primaryColor : 'white', color: c.selected ? 'white' : '#9ca3af' }}>
+                          <CheckCircle2 className="w-5 h-5" />
+                        </button>
+                        <span className="absolute top-2 right-2 text-[11px] font-bold px-2 py-1 rounded-lg bg-black/55 text-white">{q.label}</span>
+                      </div>
+                      <div className="p-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 w-14">Matéria</label>
+                          <select value={c.subject} onChange={(e) => updateCard(i, { subject: e.target.value })} className="flex-1 p-1.5 bg-white border rounded-lg text-xs outline-none" style={{ borderColor: `${p.primaryColor}20` }}>
+                            {p.subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 w-14">Gabarito</label>
+                          <div className="flex gap-1">
+                            {ANSWERS.map(a => (
+                              <button key={a} onClick={() => updateCard(i, { answer: a })} className={`w-6 h-6 rounded-md text-[11px] font-bold transition-all ${c.answer === a ? 'text-white' : 'bg-gray-100 text-gray-500'}`} style={{ backgroundColor: c.answer === a ? p.primaryColor : undefined }}>{a}</button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-between mt-5 pt-4 border-t" style={{ borderColor: `${p.primaryColor}15` }}>
+                <p className="text-sm text-gray-500 flex items-center gap-2"><FileText className="w-4 h-4" /> {selectedCount} selecionada(s) para importar</p>
+                <motion.button onClick={doImport} disabled={selectedCount === 0} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className={`px-6 py-3 rounded-xl font-bold text-white shadow-lg transition-all ${selectedCount === 0 ? 'opacity-50 cursor-not-allowed' : ''}`} style={{ backgroundColor: p.primaryColor }}>
+                  Importar {selectedCount > 0 ? selectedCount : ''} questões
+                </motion.button>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">O gabarito não vem na prova — ajuste-o em cada questão (padrão A) agora ou depois no banco. As questões importadas ficam marcadas pela origem.</p>
+            </>
+          )}
+        </div>
+      )}
+    </motion.div>
+  );
+}

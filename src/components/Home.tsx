@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { Heart, ChevronLeft, ChevronRight, Play, Plus, Image as ImageIcon, TrendingUp, User, Download, Upload } from 'lucide-react';
+import { Heart, ChevronLeft, ChevronRight, Play, Plus, Image as ImageIcon, TrendingUp, User, Download, Upload, FileUp } from 'lucide-react';
 import type { ChangeEvent, RefObject } from 'react';
 import type { View, StatCard } from '../types';
 
@@ -101,6 +101,9 @@ export default function Home({ userName, userPhoto, primaryColor, accentColor, s
         </motion.button>
         <motion.button onClick={() => onNavigate('question-bank')} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} className="w-full py-4 text-white rounded-xl font-bold text-lg shadow-lg transition-colors flex items-center justify-center gap-3" style={{ backgroundColor: primaryColor }}>
           <ImageIcon className="w-5 h-5" /> Banco de questões
+        </motion.button>
+        <motion.button onClick={() => onNavigate('import-prova')} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} className="w-full py-4 text-white rounded-xl font-bold text-lg shadow-lg transition-colors flex items-center justify-center gap-3" style={{ backgroundColor: primaryColor }}>
+          <FileUp className="w-5 h-5" /> Importar prova (PDF)
         </motion.button>
         <motion.button onClick={() => onNavigate('performance')} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} className="w-full py-4 text-white rounded-xl font-bold text-lg shadow-lg transition-colors flex items-center justify-center gap-3" style={{ backgroundColor: primaryColor }}>
           <TrendingUp className="w-5 h-5" /> Meu rendimento

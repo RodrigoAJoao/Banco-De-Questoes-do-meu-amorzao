@@ -21,11 +21,15 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
   const [bankStatus, setBankStatus] = useState<'all' | 'correct' | 'incorrect'>('all');
   const [bankErrorReason, setBankErrorReason] = useState('all');
   const [bankTags, setBankTags] = useState<string[]>([]);
+  const [bankSource, setBankSource] = useState('all');
   const [bankSearch, setBankSearch] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
 
   const errorReasonLabel = (value?: string) => ERROR_REASONS.find(r => r.value === value);
+
+  // Origens (provas importadas) presentes no banco.
+  const sources = useMemo(() => Array.from(new Set(questions.map(q => q?.source).filter(Boolean))) as string[], [questions]);
 
   // Tags disponíveis para o filtro: apenas as da matéria selecionada (ou todas).
   const availableTags = useMemo(() => {
@@ -49,6 +53,10 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
     const matchesSubject = bankSubject === 'Todas' || q.subject === bankSubject;
     const matchesStatus = bankStatus === 'all' || q.lastResult === bankStatus;
     const matchesReason = bankErrorReason === 'all' || q.errorReason === bankErrorReason;
+    const matchesSource = bankSource === 'all'
+      || (bankSource === '__manual__' && !q.source)
+      || (bankSource === '__imported__' && !!q.source)
+      || q.source === bankSource;
     const matchesTags = bankTags.length === 0 || (
       q.tags && Array.isArray(q.tags) &&
       q.tags.some(t => bankTags.some(sel => normalizeTag(sel) === normalizeTag(t)))
@@ -56,7 +64,7 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
     const matchesSearch = (q.text || '').toLowerCase().includes(bankSearch.toLowerCase()) ||
                          (q.subject || '').toLowerCase().includes(bankSearch.toLowerCase()) ||
                          (q.tags || []).some(t => t && t.toLowerCase().includes(bankSearch.toLowerCase()));
-    return matchesSubject && matchesStatus && matchesReason && matchesTags && matchesSearch;
+    return matchesSubject && matchesStatus && matchesReason && matchesSource && matchesTags && matchesSearch;
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredQuestions.length / PAGE_SIZE));
@@ -85,6 +93,12 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
           <select value={bankErrorReason} onChange={(e) => { setBankErrorReason(e.target.value); setCurrentPage(0); }} className="px-4 py-2 bg-white/50 border rounded-xl focus:ring-2 outline-none text-sm" style={{ borderColor: `${primaryColor}20`, '--tw-ring-color': primaryColor } as any}>
             <option value="all">Todos os motivos</option>
             {ERROR_REASONS.map(r => <option key={r.value} value={r.value}>{r.emoji} {r.label}</option>)}
+          </select>
+          <select value={bankSource} onChange={(e) => { setBankSource(e.target.value); setCurrentPage(0); }} className="px-4 py-2 bg-white/50 border rounded-xl focus:ring-2 outline-none text-sm" style={{ borderColor: `${primaryColor}20`, '--tw-ring-color': primaryColor } as any}>
+            <option value="all">Todas as origens</option>
+            <option value="__manual__">✍️ Criadas por mim</option>
+            <option value="__imported__">📄 Importadas de provas</option>
+            {sources.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <div className="flex bg-white/50 p-1 rounded-xl border" style={{ borderColor: `${primaryColor}20` }}>
             <button onClick={() => { setBankStatus('all'); setCurrentPage(0); }} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${bankStatus === 'all' ? 'bg-white shadow-sm' : 'text-gray-400'}`} style={{ color: bankStatus === 'all' ? primaryColor : undefined }}>Todas</button>
@@ -130,6 +144,11 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
                 </div>
               </div>
               <div className="mb-4">
+                {q.source && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md mb-2 bg-indigo-50 text-indigo-600 border border-indigo-100">
+                    📄 {q.source}
+                  </span>
+                )}
                 {q.imageUrl && <img src={q.imageUrl} alt="Questão" className="w-full h-32 object-cover rounded-lg mb-3" />}
                 <p className="text-sm text-gray-700 line-clamp-3 font-medium">{q.text || "Questão baseada em imagem"}</p>
               </div>
