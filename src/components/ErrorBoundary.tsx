@@ -1,14 +1,17 @@
-import { Component, ErrorInfo } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertCircle, RefreshCcw } from 'lucide-react';
 
 export default class ErrorBoundary extends Component {
+  // O projeto não possui @types/react, então React resolve como `any` e a base
+  // não expõe `props`. Declaramos explicitamente para o checker reconhecê-lo.
+  declare props: { children?: ReactNode };
   state = { hasError: false };
 
   static getDerivedStateFromError() {
     return { hasError: true };
   }
 
-  componentDidCatch(error, errorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
   }
 

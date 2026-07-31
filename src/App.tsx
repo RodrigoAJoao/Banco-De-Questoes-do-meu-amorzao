@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useRef, useEffect, useMemo, useCallback, ChangeEvent, KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, ChangeEvent } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { AlertCircle, X, BarChart3, Target, TrendingUp } from 'lucide-react';
 import { compressImage } from './imageUtils';
 import { saveQuestions, loadQuestions, saveAttempts, loadAttempts, saveAllSettings, loadAllSettings, migrateFromLocalStorage } from './storage';
-import type { Question, Attempt, Toast, View, StatCard } from './types';
+import type { Question, Attempt, Toast, View, StatCard, ErrorReason } from './types';
 import { SUBJECTS, ANSWERS } from './types';
 
 // Components
@@ -64,12 +64,12 @@ function App() {
   // ─── Form State ───────────────────────────────────────────────
   const [questionText, setQuestionText] = useState('');
   const [questionResolution, setQuestionResolution] = useState('');
-  const [resolutionImagePreview, setResolutionImagePreview] = useState<string | null>(null);
+  const [resolutionImages, setResolutionImages] = useState<string[]>([]);
   const [resolutionType, setResolutionType] = useState<'text' | 'image'>('text');
   const [selectedAnswer, setSelectedAnswer] = useState('A');
   const [selectedSubject, setSelectedSubject] = useState('Matemática');
-  const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [errorReason, setErrorReason] = useState<ErrorReason | undefined>(undefined);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
 
@@ -216,39 +216,34 @@ function App() {
   };
 
   const handleResolutionImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      try {
-        setResolutionImagePreview(await processImage(file));
-      } catch {
-        showToast('Erro ao processar a imagem da resolução.', 'error');
-      }
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+    const files: File[] = [];
+    for (let i = 0; i < fileList.length; i++) files.push(fileList[i]);
+    try {
+      const processed = await Promise.all(files.map(f => processImage(f)));
+      setResolutionImages(prev => [...prev, ...processed]);
+    } catch {
+      showToast('Erro ao processar a imagem da resolução.', 'error');
     }
+    if (e.target) e.target.value = '';
   };
 
-  // ─── Form Handlers ───────────────────────────────────────────
-  const handleAddTag = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && tagInput.trim()) {
-      e.preventDefault();
-      if (!tags.includes(tagInput.trim())) {
-        setTags([...tags, tagInput.trim()]);
-      }
-      setTagInput('');
-    }
+  const removeResolutionImage = (index: number) => {
+    setResolutionImages(prev => prev.filter((_, i) => i !== index));
   };
-
-  const removeTag = (tag: string) => setTags(tags.filter(t => t !== tag));
 
   const handleSubmit = () => {
     if (!questionText.trim() && !imagePreview) {
       showToast('Por favor, insira o texto da questão ou uma imagem.', 'warning');
       return;
     }
+    const resolutionImageUrls = resolutionType === 'image' ? resolutionImages : [];
     if (editingQuestionId) {
       setQuestions(prev => prev.map(q => q.id === editingQuestionId ? {
         ...q, text: questionText, imageUrl: imagePreview || undefined, answer: selectedAnswer,
         subject: selectedSubject, tags, resolution: resolutionType === 'text' ? questionResolution : undefined,
-        resolutionImageUrl: resolutionType === 'image' ? (resolutionImagePreview || undefined) : undefined
+        resolutionImageUrls, resolutionImageUrl: undefined, errorReason
       } : q));
       setEditingQuestionId(null);
     } else {
@@ -256,7 +251,7 @@ function App() {
         id: Date.now().toString(), text: questionText, imageUrl: imagePreview || undefined,
         answer: selectedAnswer, subject: selectedSubject, tags, createdAt: Date.now(),
         resolution: resolutionType === 'text' ? questionResolution : undefined,
-        resolutionImageUrl: resolutionType === 'image' ? (resolutionImagePreview || undefined) : undefined
+        resolutionImageUrls, errorReason
       }, ...questions]);
     }
     showToast(editingQuestionId ? 'Questão atualizada com sucesso! ✏️' : 'Questão salva com sucesso! 🎉', 'success');
@@ -265,16 +260,19 @@ function App() {
   };
 
   const clearForm = () => {
-    setQuestionText(''); setQuestionResolution(''); setResolutionImagePreview(null);
+    setQuestionText(''); setQuestionResolution(''); setResolutionImages([]);
     setResolutionType('text'); setSelectedAnswer('A'); setSelectedSubject('Matemática');
-    setTags([]); setImagePreview(null); setEditingQuestionId(null); setTagInput('');
+    setTags([]); setErrorReason(undefined); setImagePreview(null); setEditingQuestionId(null);
   };
 
   const handleEditQuestion = (q: Question) => {
     setEditingQuestionId(q.id); setQuestionText(q.text); setQuestionResolution(q.resolution || '');
-    setResolutionImagePreview(q.resolutionImageUrl || null); setResolutionType(q.resolutionImageUrl ? 'image' : 'text');
+    const imgs = q.resolutionImageUrls && q.resolutionImageUrls.length > 0
+      ? q.resolutionImageUrls
+      : (q.resolutionImageUrl ? [q.resolutionImageUrl] : []);
+    setResolutionImages(imgs); setResolutionType(imgs.length > 0 ? 'image' : 'text');
     setSelectedAnswer(q.answer); setSelectedSubject(q.subject); setTags(q.tags);
-    setImagePreview(q.imageUrl || null); setCurrentView('add-question');
+    setErrorReason(q.errorReason); setImagePreview(q.imageUrl || null); setCurrentView('add-question');
   };
 
   // ─── Quiz Handlers ───────────────────────────────────────────
@@ -392,7 +390,7 @@ function App() {
       case 'home':
         return <Home userName={userName} userPhoto={userPhoto} primaryColor={primaryColor} accentColor={accentColor} statsBgColor={statsBgColor} stats={stats} currentIndex={currentIndex} onPrevStat={prevStat} onNextStat={nextStat} onNavigate={setCurrentView} onExport={handleExportData} importRef={importFileInputRef} onImport={handleImportData} />;
       case 'add-question':
-        return <AddQuestion questionText={questionText} setQuestionText={setQuestionText} questionResolution={questionResolution} setQuestionResolution={setQuestionResolution} resolutionType={resolutionType} setResolutionType={setResolutionType} resolutionImagePreview={resolutionImagePreview} selectedAnswer={selectedAnswer} setSelectedAnswer={setSelectedAnswer} selectedSubject={selectedSubject} setSelectedSubject={setSelectedSubject} tags={tags} tagInput={tagInput} setTagInput={setTagInput} imagePreview={imagePreview} editingQuestionId={editingQuestionId} fileInputRef={fileInputRef} resolutionFileInputRef={resolutionFileInputRef} onImageUpload={handleImageUpload} onResolutionImageUpload={handleResolutionImageUpload} onAddTag={handleAddTag} onRemoveTag={removeTag} onSubmit={handleSubmit} onCancel={() => { clearForm(); setCurrentView('home'); }} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} answers={ANSWERS} />;
+        return <AddQuestion questionText={questionText} setQuestionText={setQuestionText} questionResolution={questionResolution} setQuestionResolution={setQuestionResolution} resolutionType={resolutionType} setResolutionType={setResolutionType} resolutionImages={resolutionImages} onRemoveResolutionImage={removeResolutionImage} selectedAnswer={selectedAnswer} setSelectedAnswer={setSelectedAnswer} selectedSubject={selectedSubject} setSelectedSubject={setSelectedSubject} tags={tags} setTags={setTags} allTags={allTags} errorReason={errorReason} setErrorReason={setErrorReason} imagePreview={imagePreview} editingQuestionId={editingQuestionId} fileInputRef={fileInputRef} resolutionFileInputRef={resolutionFileInputRef} onImageUpload={handleImageUpload} onResolutionImageUpload={handleResolutionImageUpload} onSubmit={handleSubmit} onCancel={() => { clearForm(); setCurrentView('home'); }} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} answers={ANSWERS} />;
       case 'take-quiz':
         return <TakeQuiz quizSubject={quizSubject} setQuizSubject={setQuizSubject} quizTag={quizTag} setQuizTag={setQuizTag} useTimer={useTimer} setUseTimer={setUseTimer} timerMinutes={timerMinutes} setTimerMinutes={setTimerMinutes} drawnQuestions={drawnQuestions} onDraw={handleDrawQuestions} onStart={startQuiz} onNavigate={setCurrentView} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} allTags={allTags} />;
       case 'quiz-session':

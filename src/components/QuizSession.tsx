@@ -20,6 +20,10 @@ interface QuizSessionProps {
 
 export default function QuizSession(p: QuizSessionProps) {
   const q = p.currentQuestion;
+  const resolutionImages = (q.resolutionImageUrls && q.resolutionImageUrls.length > 0)
+    ? q.resolutionImageUrls
+    : (q.resolutionImageUrl ? [q.resolutionImageUrl] : []);
+  const hasResolution = !!q.resolution || resolutionImages.length > 0;
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-4xl glass-card rounded-3xl p-8">
       <div className="flex items-center justify-between mb-8">
@@ -98,7 +102,7 @@ export default function QuizSession(p: QuizSessionProps) {
           ) : (
             <div className="space-y-4">
               <div className="flex gap-3">
-                {(q.resolution || q.resolutionImageUrl) && (
+                {hasResolution && (
                   <motion.button onClick={() => p.setShowResolution(!p.showResolution)} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 py-4 bg-white border-2 rounded-2xl font-bold text-lg shadow-md transition-all flex items-center justify-center gap-2" style={{ color: p.primaryColor, borderColor: p.primaryColor }}>
                     <Heart className={`w-5 h-5 ${p.showResolution ? 'fill-current' : ''}`} /> {p.showResolution ? 'Ocultar Resolução' : 'Ver Resolução'}
                   </motion.button>
@@ -114,7 +118,13 @@ export default function QuizSession(p: QuizSessionProps) {
                     <h4 className="font-bold text-lg mb-4 flex items-center gap-2" style={{ color: p.accentColor }}>
                       <Star className="w-5 h-5 fill-pink-500 text-pink-500" style={{ color: p.primaryColor, fill: p.primaryColor }} /> Resolução Comentada
                     </h4>
-                    {q.resolutionImageUrl && <img src={q.resolutionImageUrl} alt="Resolução" className="w-full max-h-80 object-contain rounded-xl mb-4 shadow-sm" />}
+                    {resolutionImages.length > 0 && (
+                      <div className="space-y-3 mb-4">
+                        {resolutionImages.map((img, idx) => (
+                          <img key={idx} src={img} alt={`Resolução ${idx + 1}`} className="w-full max-h-80 object-contain rounded-xl shadow-sm" />
+                        ))}
+                      </div>
+                    )}
                     {q.resolution && <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{q.resolution}</p>}
                   </motion.div>
                 )}
