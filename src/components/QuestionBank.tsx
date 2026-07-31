@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, X, Heart, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Question, View } from '../types';
-import { ERROR_REASONS } from '../types';
+import { ERROR_REASONS, normalizeTag } from '../types';
+import MultiSelectFilter from './MultiSelectFilter';
 
 interface QuestionBankProps {
   questions: Question[];
@@ -19,21 +20,43 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
   const [bankSubject, setBankSubject] = useState('Todas');
   const [bankStatus, setBankStatus] = useState<'all' | 'correct' | 'incorrect'>('all');
   const [bankErrorReason, setBankErrorReason] = useState('all');
+  const [bankTags, setBankTags] = useState<string[]>([]);
   const [bankSearch, setBankSearch] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
 
   const errorReasonLabel = (value?: string) => ERROR_REASONS.find(r => r.value === value);
 
+  // Tags disponíveis para o filtro: apenas as da matéria selecionada (ou todas).
+  const availableTags = useMemo(() => {
+    const base = bankSubject === 'Todas' ? questions : questions.filter(q => q && q.subject === bankSubject);
+    const byNorm = new Map<string, string>();
+    base.forEach(q => { if (q?.tags) q.tags.forEach(t => { if (t) byNorm.set(normalizeTag(t), t); }); });
+    return Array.from(byNorm.values());
+  }, [questions, bankSubject]);
+
+  // Remove tags selecionadas que deixaram de existir na matéria escolhida.
+  useEffect(() => {
+    setBankTags(prev => {
+      const avail = new Set(availableTags.map(normalizeTag));
+      const next = prev.filter(t => avail.has(normalizeTag(t)));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [availableTags]);
+
   const filteredQuestions = questions.filter(q => {
     if (!q) return false;
     const matchesSubject = bankSubject === 'Todas' || q.subject === bankSubject;
     const matchesStatus = bankStatus === 'all' || q.lastResult === bankStatus;
     const matchesReason = bankErrorReason === 'all' || q.errorReason === bankErrorReason;
+    const matchesTags = bankTags.length === 0 || (
+      q.tags && Array.isArray(q.tags) &&
+      q.tags.some(t => bankTags.some(sel => normalizeTag(sel) === normalizeTag(t)))
+    );
     const matchesSearch = (q.text || '').toLowerCase().includes(bankSearch.toLowerCase()) ||
                          (q.subject || '').toLowerCase().includes(bankSearch.toLowerCase()) ||
                          (q.tags || []).some(t => t && t.toLowerCase().includes(bankSearch.toLowerCase()));
-    return matchesSubject && matchesStatus && matchesReason && matchesSearch;
+    return matchesSubject && matchesStatus && matchesReason && matchesTags && matchesSearch;
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredQuestions.length / PAGE_SIZE));
@@ -68,6 +91,21 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
             <button onClick={() => { setBankStatus('correct'); setCurrentPage(0); }} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${bankStatus === 'correct' ? 'bg-white shadow-sm' : 'text-gray-400'}`} style={{ color: bankStatus === 'correct' ? '#10b981' : undefined }}>Certas</button>
             <button onClick={() => { setBankStatus('incorrect'); setCurrentPage(0); }} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${bankStatus === 'incorrect' ? 'bg-white shadow-sm' : 'text-gray-400'}`} style={{ color: bankStatus === 'incorrect' ? '#f43f5e' : undefined }}>Erradas</button>
           </div>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: accentColor }}>Filtrar por Tag</label>
+        <div className="max-w-md">
+          <MultiSelectFilter
+            selected={bankTags}
+            setSelected={(v) => { setBankTags(v); setCurrentPage(0); }}
+            options={availableTags}
+            primaryColor={primaryColor}
+            accentColor={accentColor}
+            placeholder="Todas as tags"
+            emptyText={availableTags.length === 0 ? 'Nenhuma tag disponível' : 'Nenhuma opção disponível'}
+          />
         </div>
       </div>
 
