@@ -9,7 +9,7 @@ import { AlertCircle, X, BarChart3, Target, TrendingUp } from 'lucide-react';
 import { compressImage } from './imageUtils';
 import { saveQuestions, loadQuestions, saveAttempts, loadAttempts, saveAllSettings, loadAllSettings, migrateFromLocalStorage } from './storage';
 import type { Question, Attempt, Toast, View, StatCard, ErrorReason } from './types';
-import { SUBJECTS, ANSWERS } from './types';
+import { SUBJECTS, ANSWERS, normalizeTag } from './types';
 
 // Components
 import ErrorBoundary from './components/ErrorBoundary';
@@ -74,8 +74,11 @@ function App() {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
 
   // ─── Quiz State ───────────────────────────────────────────────
-  const [quizSubject, setQuizSubject] = useState('Todas');
-  const [quizTag, setQuizTag] = useState('Todos');
+  const [quizSubjects, setQuizSubjects] = useState<string[]>([]);
+  const [quizTags, setQuizTags] = useState<string[]>([]);
+  const [quizWrongCount, setQuizWrongCount] = useState(10);
+  const [quizRightCount, setQuizRightCount] = useState(0);
+  const [quizNewCount, setQuizNewCount] = useState(10);
   const [useTimer, setUseTimer] = useState(false);
   const [timerMinutes, setTimerMinutes] = useState(3);
   const [drawnQuestions, setDrawnQuestions] = useState<Question[]>([]);
@@ -99,6 +102,43 @@ function App() {
     questions.forEach(q => { if (q?.tags) q.tags.forEach(t => { if (t) tagSet.add(t); }); });
     return Array.from(tagSet);
   }, [questions]);
+
+  // ─── Quiz Filtering (multi-matéria + multi-tag + desempenho) ───
+  // Tags disponíveis para o filtro: apenas as das matérias selecionadas
+  // (ou todas, quando nenhuma matéria estiver marcada).
+  const quizAvailableTags = useMemo(() => {
+    const base = quizSubjects.length > 0
+      ? questions.filter(q => q && quizSubjects.includes(q.subject))
+      : questions;
+    const byNorm = new Map<string, string>();
+    base.forEach(q => { if (q?.tags) q.tags.forEach(t => { if (t) byNorm.set(normalizeTag(t), t); }); });
+    return Array.from(byNorm.values());
+  }, [questions, quizSubjects]);
+
+  // Remove das tags selecionadas aquelas que deixaram de pertencer às matérias marcadas.
+  useEffect(() => {
+    setQuizTags(prev => {
+      const availNorm = new Set(quizAvailableTags.map(normalizeTag));
+      const next = prev.filter(t => availNorm.has(normalizeTag(t)));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [quizAvailableTags]);
+
+  const quizPool = useMemo(() => {
+    let pool = questions.filter(q => q !== null && q !== undefined);
+    if (quizSubjects.length > 0) pool = pool.filter(q => quizSubjects.includes(q.subject));
+    if (quizTags.length > 0) {
+      const wanted = quizTags.map(normalizeTag);
+      pool = pool.filter(q => q.tags && Array.isArray(q.tags) && q.tags.some(t => wanted.includes(normalizeTag(t))));
+    }
+    return pool;
+  }, [questions, quizSubjects, quizTags]);
+
+  const quizCounts = useMemo(() => ({
+    wrong: quizPool.filter(q => q.lastResult === 'incorrect').length,
+    right: quizPool.filter(q => q.lastResult === 'correct').length,
+    fresh: quizPool.filter(q => !q.lastResult).length,
+  }), [quizPool]);
 
   const stats: StatCard[] = useMemo(() => {
     const totalQuestions = questions.length;
@@ -276,17 +316,25 @@ function App() {
   };
 
   // ─── Quiz Handlers ───────────────────────────────────────────
-  const handleDrawQuestions = () => {
-    let filtered = [...questions].filter(q => q !== null && q !== undefined);
-    if (quizSubject !== 'Todas') filtered = filtered.filter(q => q.subject === quizSubject);
-    if (quizTag !== 'Todos') filtered = filtered.filter(q => q.tags && Array.isArray(q.tags) && q.tags.includes(quizTag));
-    if (filtered.length === 0) { showToast('Nenhuma questão encontrada com esses filtros.', 'warning'); return; }
-    const shuffled = [...filtered];
-    for (let i = shuffled.length - 1; i > 0; i--) {
+  const shuffle = <T,>(arr: T[]): T[] => {
+    const out = [...arr];
+    for (let i = out.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      [out[i], out[j]] = [out[j], out[i]];
     }
-    setDrawnQuestions(shuffled.slice(0, 10));
+    return out;
+  };
+
+  const handleDrawQuestions = () => {
+    const wrong = shuffle(quizPool.filter(q => q.lastResult === 'incorrect')).slice(0, quizWrongCount);
+    const right = shuffle(quizPool.filter(q => q.lastResult === 'correct')).slice(0, quizRightCount);
+    const fresh = shuffle(quizPool.filter(q => !q.lastResult)).slice(0, quizNewCount);
+    const drawn = shuffle([...wrong, ...right, ...fresh]);
+    if (drawn.length === 0) {
+      showToast('Nenhuma questão encontrada com esses filtros/quantidades.', 'warning');
+      return;
+    }
+    setDrawnQuestions(drawn);
   };
 
   const startQuiz = () => {
@@ -392,7 +440,7 @@ function App() {
       case 'add-question':
         return <AddQuestion questionText={questionText} setQuestionText={setQuestionText} questionResolution={questionResolution} setQuestionResolution={setQuestionResolution} resolutionType={resolutionType} setResolutionType={setResolutionType} resolutionImages={resolutionImages} onRemoveResolutionImage={removeResolutionImage} selectedAnswer={selectedAnswer} setSelectedAnswer={setSelectedAnswer} selectedSubject={selectedSubject} setSelectedSubject={setSelectedSubject} tags={tags} setTags={setTags} allTags={allTags} errorReason={errorReason} setErrorReason={setErrorReason} imagePreview={imagePreview} editingQuestionId={editingQuestionId} fileInputRef={fileInputRef} resolutionFileInputRef={resolutionFileInputRef} onImageUpload={handleImageUpload} onResolutionImageUpload={handleResolutionImageUpload} onSubmit={handleSubmit} onCancel={() => { clearForm(); setCurrentView('home'); }} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} answers={ANSWERS} />;
       case 'take-quiz':
-        return <TakeQuiz quizSubject={quizSubject} setQuizSubject={setQuizSubject} quizTag={quizTag} setQuizTag={setQuizTag} useTimer={useTimer} setUseTimer={setUseTimer} timerMinutes={timerMinutes} setTimerMinutes={setTimerMinutes} drawnQuestions={drawnQuestions} onDraw={handleDrawQuestions} onStart={startQuiz} onNavigate={setCurrentView} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} allTags={allTags} />;
+        return <TakeQuiz quizSubjects={quizSubjects} setQuizSubjects={setQuizSubjects} quizTags={quizTags} setQuizTags={setQuizTags} availableTags={quizAvailableTags} quizWrongCount={quizWrongCount} setQuizWrongCount={setQuizWrongCount} quizRightCount={quizRightCount} setQuizRightCount={setQuizRightCount} quizNewCount={quizNewCount} setQuizNewCount={setQuizNewCount} counts={quizCounts} useTimer={useTimer} setUseTimer={setUseTimer} timerMinutes={timerMinutes} setTimerMinutes={setTimerMinutes} drawnQuestions={drawnQuestions} onDraw={handleDrawQuestions} onStart={startQuiz} onNavigate={setCurrentView} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} />;
       case 'quiz-session':
         const currentQ = drawnQuestions[currentQuizIndex];
         return currentQ ? <QuizSession currentQuestion={currentQ} currentQuizIndex={currentQuizIndex} totalQuestions={drawnQuestions.length} selectedQuizOption={selectedQuizOption} setSelectedQuizOption={setSelectedQuizOption} isCorrected={isCorrected} showResolution={showResolution} setShowResolution={setShowResolution} useTimer={useTimer} timeLeft={timeLeft} onCorrect={handleCorrect} onNext={nextQuestion} onExit={() => setCurrentView('take-quiz')} primaryColor={primaryColor} accentColor={accentColor} answers={ANSWERS} formatTime={formatTime} /> : null;

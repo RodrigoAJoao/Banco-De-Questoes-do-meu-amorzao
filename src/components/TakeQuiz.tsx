@@ -1,10 +1,16 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Timer, Play, RefreshCcw, Heart, Star } from 'lucide-react';
+import { ArrowLeft, Timer, Play, RefreshCcw, Heart, Minus, Plus } from 'lucide-react';
 import type { Question, View } from '../types';
+import MultiSelectFilter from './MultiSelectFilter';
 
 interface TakeQuizProps {
-  quizSubject: string; setQuizSubject: (v: string) => void;
-  quizTag: string; setQuizTag: (v: string) => void;
+  quizSubjects: string[]; setQuizSubjects: (v: string[]) => void;
+  quizTags: string[]; setQuizTags: (v: string[]) => void;
+  availableTags: string[];
+  quizWrongCount: number; setQuizWrongCount: (v: number) => void;
+  quizRightCount: number; setQuizRightCount: (v: number) => void;
+  quizNewCount: number; setQuizNewCount: (v: number) => void;
+  counts: { wrong: number; right: number; fresh: number };
   useTimer: boolean; setUseTimer: (v: boolean) => void;
   timerMinutes: number; setTimerMinutes: (v: number) => void;
   drawnQuestions: Question[];
@@ -12,10 +18,28 @@ interface TakeQuizProps {
   onStart: () => void;
   onNavigate: (v: View) => void;
   primaryColor: string; accentColor: string;
-  subjects: string[]; allTags: string[];
+  subjects: string[];
+}
+
+interface CountRow {
+  label: string; emoji: string; available: number;
+  value: number; setValue: (v: number) => void; color: string;
 }
 
 export default function TakeQuiz(p: TakeQuizProps) {
+  const rows: CountRow[] = [
+    { label: 'Erradas', emoji: '❌', available: p.counts.wrong, value: p.quizWrongCount, setValue: p.setQuizWrongCount, color: '#f43f5e' },
+    { label: 'Certas', emoji: '✅', available: p.counts.right, value: p.quizRightCount, setValue: p.setQuizRightCount, color: '#10b981' },
+    { label: 'Novas', emoji: '✨', available: p.counts.fresh, value: p.quizNewCount, setValue: p.setQuizNewCount, color: p.primaryColor },
+  ];
+
+  const totalToDraw =
+    Math.min(p.quizWrongCount, p.counts.wrong) +
+    Math.min(p.quizRightCount, p.counts.right) +
+    Math.min(p.quizNewCount, p.counts.fresh);
+
+  const clamp = (v: number) => Math.max(0, Math.min(999, v));
+
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full max-w-4xl glass-card rounded-3xl p-8">
       <div className="flex items-center mb-8">
@@ -29,21 +53,56 @@ export default function TakeQuiz(p: TakeQuizProps) {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-semibold mb-2" style={{ color: p.accentColor }}>Filtrar por Matéria</label>
-            <select value={p.quizSubject} onChange={(e) => p.setQuizSubject(e.target.value)} className="w-full p-3 bg-white/50 border rounded-xl focus:ring-2 outline-none" style={{ borderColor: `${p.primaryColor}20`, '--tw-ring-color': p.primaryColor } as any}>
-              <option value="Todas">Todas as matérias</option>
-              {p.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <MultiSelectFilter selected={p.quizSubjects} setSelected={p.setQuizSubjects} options={p.subjects} primaryColor={p.primaryColor} accentColor={p.accentColor} placeholder="Todas as matérias" />
+            <p className="text-xs text-gray-400 mt-1">{p.quizSubjects.length === 0 ? 'Nenhuma matéria: considera todas.' : `${p.quizSubjects.length} selecionada(s)`}</p>
           </div>
           <div>
             <label className="block text-sm font-semibold mb-2" style={{ color: p.accentColor }}>Filtrar por Tag</label>
-            <select value={p.quizTag} onChange={(e) => p.setQuizTag(e.target.value)} className="w-full p-3 bg-white/50 border rounded-xl focus:ring-2 outline-none" style={{ borderColor: `${p.primaryColor}20`, '--tw-ring-color': p.primaryColor } as any}>
-              <option value="Todos">Todas as tags</option>
-              {p.allTags.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
+            <MultiSelectFilter selected={p.quizTags} setSelected={p.setQuizTags} options={p.availableTags} primaryColor={p.primaryColor} accentColor={p.accentColor} placeholder="Todas as tags" emptyText={p.availableTags.length === 0 ? 'Nenhuma tag nas matérias selecionadas' : 'Nenhuma opção disponível'} />
+            <p className="text-xs text-gray-400 mt-1">Mostra apenas as tags das matérias selecionadas.</p>
           </div>
         </div>
 
         <div className="space-y-4">
+          <div className="p-4 bg-white/40 rounded-xl border border-white/60">
+            <label className="text-sm font-semibold flex items-center gap-2 mb-3" style={{ color: p.accentColor }}>
+              Quantidade por desempenho
+            </label>
+            <div className="space-y-3">
+              {rows.map(r => (
+                <div key={r.label} className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span>{r.emoji}</span>
+                    <span className="text-sm font-bold" style={{ color: r.color }}>{r.label}</span>
+                    <span className="text-[11px] text-gray-400">({r.available} disp.)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={() => r.setValue(clamp(r.value - 1))} className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/70 hover:bg-white transition-colors border" style={{ borderColor: `${p.primaryColor}20`, color: p.primaryColor }}>
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <input
+                      type="number"
+                      min={0}
+                      value={r.value}
+                      onChange={(e) => r.setValue(clamp(Number(e.target.value)))}
+                      className="w-12 text-center text-sm font-bold p-1.5 bg-white/70 border rounded-lg outline-none focus:ring-2"
+                      style={{ borderColor: `${p.primaryColor}20`, color: p.accentColor, '--tw-ring-color': p.primaryColor } as any}
+                    />
+                    <button onClick={() => r.setValue(clamp(r.value + 1))} className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/70 hover:bg-white transition-colors border" style={{ borderColor: `${p.primaryColor}20`, color: p.primaryColor }}>
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t" style={{ borderColor: `${p.primaryColor}15` }}>
+              <button onClick={() => { p.setQuizWrongCount(Math.max(1, p.counts.wrong)); p.setQuizRightCount(0); p.setQuizNewCount(0); }} className="text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors" style={{ backgroundColor: '#f43f5e15', color: '#f43f5e' }}>
+                Somente erradas
+              </button>
+              <span className="text-xs text-gray-500 ml-auto">Total no sorteio: <strong style={{ color: p.primaryColor }}>{totalToDraw}</strong></span>
+            </div>
+          </div>
+
           <div className="p-4 bg-white/30 rounded-xl border border-white/50">
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-semibold flex items-center gap-2" style={{ color: p.accentColor }}>
