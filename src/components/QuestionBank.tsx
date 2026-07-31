@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, X, Heart, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Question, View } from '../types';
+import { ERROR_REASONS } from '../types';
 
 interface QuestionBankProps {
   questions: Question[];
@@ -17,18 +18,22 @@ const PAGE_SIZE = 12;
 export default function QuestionBank({ questions, setQuestions, primaryColor, accentColor, subjects, onNavigate, onEditQuestion }: QuestionBankProps) {
   const [bankSubject, setBankSubject] = useState('Todas');
   const [bankStatus, setBankStatus] = useState<'all' | 'correct' | 'incorrect'>('all');
+  const [bankErrorReason, setBankErrorReason] = useState('all');
   const [bankSearch, setBankSearch] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
+
+  const errorReasonLabel = (value?: string) => ERROR_REASONS.find(r => r.value === value);
 
   const filteredQuestions = questions.filter(q => {
     if (!q) return false;
     const matchesSubject = bankSubject === 'Todas' || q.subject === bankSubject;
     const matchesStatus = bankStatus === 'all' || q.lastResult === bankStatus;
-    const matchesSearch = (q.text || '').toLowerCase().includes(bankSearch.toLowerCase()) || 
+    const matchesReason = bankErrorReason === 'all' || q.errorReason === bankErrorReason;
+    const matchesSearch = (q.text || '').toLowerCase().includes(bankSearch.toLowerCase()) ||
                          (q.subject || '').toLowerCase().includes(bankSearch.toLowerCase()) ||
                          (q.tags || []).some(t => t && t.toLowerCase().includes(bankSearch.toLowerCase()));
-    return matchesSubject && matchesStatus && matchesSearch;
+    return matchesSubject && matchesStatus && matchesReason && matchesSearch;
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredQuestions.length / PAGE_SIZE));
@@ -54,6 +59,10 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
             <option value="Todas">Todas as matérias</option>
             {subjects.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
+          <select value={bankErrorReason} onChange={(e) => { setBankErrorReason(e.target.value); setCurrentPage(0); }} className="px-4 py-2 bg-white/50 border rounded-xl focus:ring-2 outline-none text-sm" style={{ borderColor: `${primaryColor}20`, '--tw-ring-color': primaryColor } as any}>
+            <option value="all">Todos os motivos</option>
+            {ERROR_REASONS.map(r => <option key={r.value} value={r.value}>{r.emoji} {r.label}</option>)}
+          </select>
           <div className="flex bg-white/50 p-1 rounded-xl border" style={{ borderColor: `${primaryColor}20` }}>
             <button onClick={() => { setBankStatus('all'); setCurrentPage(0); }} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${bankStatus === 'all' ? 'bg-white shadow-sm' : 'text-gray-400'}`} style={{ color: bankStatus === 'all' ? primaryColor : undefined }}>Todas</button>
             <button onClick={() => { setBankStatus('correct'); setCurrentPage(0); }} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${bankStatus === 'correct' ? 'bg-white shadow-sm' : 'text-gray-400'}`} style={{ color: bankStatus === 'correct' ? '#10b981' : undefined }}>Certas</button>
@@ -69,11 +78,18 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
               <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: q.lastResult === 'correct' ? '#10b981' : (q.lastResult === 'incorrect' ? '#f43f5e' : primaryColor) }}></div>
               <div className="flex justify-between items-start mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md" style={{ backgroundColor: `${primaryColor}10`, color: primaryColor }}>{q.subject}</span>
-                {q.lastResult && (
-                  <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-md ${q.lastResult === 'correct' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                    {q.lastResult === 'correct' ? 'Acertou' : 'Errou'}
-                  </span>
-                )}
+                <div className="flex items-center gap-1">
+                  {q.errorReason && errorReasonLabel(q.errorReason) && (
+                    <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-amber-100 text-amber-700" title="Motivo do erro">
+                      {errorReasonLabel(q.errorReason)!.emoji} {errorReasonLabel(q.errorReason)!.label}
+                    </span>
+                  )}
+                  {q.lastResult && (
+                    <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-md ${q.lastResult === 'correct' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                      {q.lastResult === 'correct' ? 'Acertou' : 'Errou'}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="mb-4">
                 {q.imageUrl && <img src={q.imageUrl} alt="Questão" className="w-full h-32 object-cover rounded-lg mb-3" />}

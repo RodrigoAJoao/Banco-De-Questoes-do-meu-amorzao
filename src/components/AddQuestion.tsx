@@ -16,6 +16,7 @@ interface AddQuestionProps {
   tags: string[]; setTags: (v: string[]) => void; allTags: string[];
   errorReason: ErrorReason | undefined; setErrorReason: (v: ErrorReason | undefined) => void;
   imagePreview: string | null;
+  onRemoveImage: () => void;
   editingQuestionId: string | null;
   fileInputRef: RefObject<HTMLInputElement | null>;
   resolutionFileInputRef: RefObject<HTMLInputElement | null>;
@@ -85,16 +86,24 @@ export default function AddQuestion(p: AddQuestionProps) {
 
           <div>
             <label className="block text-sm font-semibold mb-2" style={{ color: p.accentColor }}>Imagem da Questão (Opcional)</label>
-            <div onClick={() => p.fileInputRef.current?.click()} className="w-full h-40 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden" style={{ borderColor: `${p.primaryColor}40`, backgroundColor: `${p.primaryColor}05` }}>
-              {p.imagePreview ? (
-                <img src={p.imagePreview} alt="Preview" className="w-full h-full object-contain" />
-              ) : (
+            {p.imagePreview ? (
+              <div className="relative w-full h-40 rounded-xl overflow-hidden border-2" style={{ borderColor: `${p.primaryColor}30` }}>
+                <img src={p.imagePreview} alt="Preview" className="w-full h-full object-contain bg-white/40" />
+                <button type="button" onClick={(e) => { e.stopPropagation(); p.onRemoveImage(); }} className="absolute top-2 right-2 bg-rose-500 text-white rounded-full p-1.5 shadow-md hover:bg-rose-600 transition-colors" title="Remover imagem">
+                  <X className="w-4 h-4" />
+                </button>
+                <button type="button" onClick={() => p.fileInputRef.current?.click()} className="absolute bottom-2 right-2 bg-white/90 text-xs font-bold px-2.5 py-1 rounded-lg shadow-sm hover:bg-white transition-colors" style={{ color: p.primaryColor }} title="Trocar imagem">
+                  Trocar
+                </button>
+              </div>
+            ) : (
+              <div onClick={() => p.fileInputRef.current?.click()} className="w-full h-40 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden" style={{ borderColor: `${p.primaryColor}40`, backgroundColor: `${p.primaryColor}05` }}>
                 <div className="flex flex-col items-center">
                   <ImageIcon className="w-8 h-8 mb-2" style={{ color: p.primaryColor }} />
                   <span className="text-sm font-medium" style={{ color: p.primaryColor }}>Clique para upload</span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
             <input type="file" ref={p.fileInputRef} onChange={p.onImageUpload} accept="image/*" className="hidden" />
           </div>
         </div>
