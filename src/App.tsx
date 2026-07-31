@@ -88,6 +88,8 @@ function App() {
   const [showResolution, setShowResolution] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [quizResults, setQuizResults] = useState<{ question: Question; result: 'correct' | 'incorrect' }[]>([]);
+  const [currentAttemptId, setCurrentAttemptId] = useState<string | null>(null);
+  const [currentErrorReason, setCurrentErrorReason] = useState<ErrorReason | undefined>(undefined);
 
   // ─── Refs ─────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -340,6 +342,7 @@ function App() {
   const startQuiz = () => {
     if (drawnQuestions.length === 0) { showToast('Sorteie as questões primeiro!', 'warning'); return; }
     setCurrentQuizIndex(0); setSelectedQuizOption(null); setIsCorrected(false); setShowResolution(false);
+    setCurrentAttemptId(null); setCurrentErrorReason(undefined);
     if (useTimer) setTimeLeft(timerMinutes * 60);
     setQuizResults([]); setCurrentView('quiz-session');
   };
@@ -348,15 +351,32 @@ function App() {
     const currentQuestion = drawnQuestions[currentQuizIndex];
     if (!currentQuestion) return;
     const isCorrect = selectedQuizOption === currentQuestion.answer;
+    const attemptId = Date.now().toString();
     setIsCorrected(true);
-    setAttempts(prev => [...prev, { id: Date.now().toString(), questionId: currentQuestion.id, result: isCorrect ? 'correct' : 'incorrect', timestamp: Date.now(), subject: currentQuestion.subject, tags: currentQuestion.tags }]);
+    setCurrentAttemptId(attemptId);
+    // Prefila com o motivo já registrado na questão (se houver) quando errar.
+    setCurrentErrorReason(isCorrect ? undefined : currentQuestion.errorReason);
+    setAttempts(prev => [...prev, { id: attemptId, questionId: currentQuestion.id, result: isCorrect ? 'correct' : 'incorrect', timestamp: Date.now(), subject: currentQuestion.subject, tags: currentQuestion.tags, errorReason: isCorrect ? undefined : currentQuestion.errorReason }]);
     setQuestions(prev => prev.map(q => q.id === currentQuestion.id ? { ...q, lastResult: isCorrect ? 'correct' : 'incorrect', reviewCount: (q.reviewCount || 0) + 1 } : q));
     setQuizResults(prev => [...prev, { question: currentQuestion, result: isCorrect ? 'correct' : 'incorrect' }]);
   }, [drawnQuestions, currentQuizIndex, selectedQuizOption]);
 
+  // Classifica o motivo do erro da questão atual durante a revisão.
+  const handleSetQuizErrorReason = (reason: ErrorReason | undefined) => {
+    const currentQuestion = drawnQuestions[currentQuizIndex];
+    setCurrentErrorReason(reason);
+    if (currentAttemptId) {
+      setAttempts(prev => prev.map(a => a.id === currentAttemptId ? { ...a, errorReason: reason } : a));
+    }
+    if (currentQuestion) {
+      setQuestions(prev => prev.map(q => q.id === currentQuestion.id ? { ...q, errorReason: reason } : q));
+    }
+  };
+
   const nextQuestion = () => {
     if (currentQuizIndex < drawnQuestions.length - 1) {
       setCurrentQuizIndex(prev => prev + 1); setSelectedQuizOption(null); setIsCorrected(false); setShowResolution(false);
+      setCurrentAttemptId(null); setCurrentErrorReason(undefined);
       if (useTimer) setTimeLeft(timerMinutes * 60);
     } else {
       setCurrentView('quiz-results');
@@ -443,7 +463,7 @@ function App() {
         return <TakeQuiz quizSubjects={quizSubjects} setQuizSubjects={setQuizSubjects} quizTags={quizTags} setQuizTags={setQuizTags} availableTags={quizAvailableTags} quizWrongCount={quizWrongCount} setQuizWrongCount={setQuizWrongCount} quizRightCount={quizRightCount} setQuizRightCount={setQuizRightCount} quizNewCount={quizNewCount} setQuizNewCount={setQuizNewCount} counts={quizCounts} useTimer={useTimer} setUseTimer={setUseTimer} timerMinutes={timerMinutes} setTimerMinutes={setTimerMinutes} drawnQuestions={drawnQuestions} onDraw={handleDrawQuestions} onStart={startQuiz} onNavigate={setCurrentView} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} />;
       case 'quiz-session':
         const currentQ = drawnQuestions[currentQuizIndex];
-        return currentQ ? <QuizSession currentQuestion={currentQ} currentQuizIndex={currentQuizIndex} totalQuestions={drawnQuestions.length} selectedQuizOption={selectedQuizOption} setSelectedQuizOption={setSelectedQuizOption} isCorrected={isCorrected} showResolution={showResolution} setShowResolution={setShowResolution} useTimer={useTimer} timeLeft={timeLeft} onCorrect={handleCorrect} onNext={nextQuestion} onExit={() => setCurrentView('take-quiz')} primaryColor={primaryColor} accentColor={accentColor} answers={ANSWERS} formatTime={formatTime} /> : null;
+        return currentQ ? <QuizSession currentQuestion={currentQ} currentQuizIndex={currentQuizIndex} totalQuestions={drawnQuestions.length} selectedQuizOption={selectedQuizOption} setSelectedQuizOption={setSelectedQuizOption} isCorrected={isCorrected} showResolution={showResolution} setShowResolution={setShowResolution} useTimer={useTimer} timeLeft={timeLeft} onCorrect={handleCorrect} onNext={nextQuestion} onExit={() => setCurrentView('take-quiz')} errorReason={currentErrorReason} onErrorReasonChange={handleSetQuizErrorReason} primaryColor={primaryColor} accentColor={accentColor} answers={ANSWERS} formatTime={formatTime} /> : null;
       case 'quiz-results':
         return <QuizResults quizResults={quizResults} primaryColor={primaryColor} accentColor={accentColor} onNewQuiz={() => { setCurrentView('take-quiz'); setDrawnQuestions([]); setQuizResults([]); }} onGoHome={() => { setCurrentView('home'); setQuizResults([]); }} />;
       case 'question-bank':

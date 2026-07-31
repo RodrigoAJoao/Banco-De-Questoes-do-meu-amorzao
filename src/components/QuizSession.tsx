@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Clock, CheckCircle2, ChevronRight, Heart, Star } from 'lucide-react';
-import type { Question, View } from '../types';
+import type { Question, View, ErrorReason } from '../types';
+import ErrorReasonSelector from './ErrorReasonSelector';
 
 interface QuizSessionProps {
   currentQuestion: Question;
@@ -13,6 +14,8 @@ interface QuizSessionProps {
   onCorrect: () => void;
   onNext: () => void;
   onExit: () => void;
+  errorReason: ErrorReason | undefined;
+  onErrorReasonChange: (v: ErrorReason | undefined) => void;
   primaryColor: string; accentColor: string;
   answers: string[];
   formatTime: (s: number) => string;
@@ -24,6 +27,7 @@ export default function QuizSession(p: QuizSessionProps) {
     ? q.resolutionImageUrls
     : (q.resolutionImageUrl ? [q.resolutionImageUrl] : []);
   const hasResolution = !!q.resolution || resolutionImages.length > 0;
+  const isWrong = p.isCorrected && p.selectedQuizOption !== q.answer;
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-4xl glass-card rounded-3xl p-8">
       <div className="flex items-center justify-between mb-8">
@@ -101,6 +105,14 @@ export default function QuizSession(p: QuizSessionProps) {
             </motion.button>
           ) : (
             <div className="space-y-4">
+              {isWrong && (
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="p-4 rounded-2xl border-2" style={{ backgroundColor: '#fff1f2', borderColor: '#fecdd3' }}>
+                  <p className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: '#e11d48' }}>
+                    <X className="w-4 h-4" /> Você errou — qual foi o motivo?
+                  </p>
+                  <ErrorReasonSelector value={p.errorReason} onChange={p.onErrorReasonChange} primaryColor={p.primaryColor} accentColor={p.accentColor} compact />
+                </motion.div>
+              )}
               <div className="flex gap-3">
                 {hasResolution && (
                   <motion.button onClick={() => p.setShowResolution(!p.showResolution)} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 py-4 bg-white border-2 rounded-2xl font-bold text-lg shadow-md transition-all flex items-center justify-center gap-2" style={{ color: p.primaryColor, borderColor: p.primaryColor }}>
