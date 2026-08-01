@@ -35,7 +35,7 @@ interface Line { col: number; y: number; top: number; bottom: number; x: number;
 interface ColBound { x0: number; x1: number; }
 interface PageMeta { width: number; height: number; cols: ColBound[]; section: string; lines: Line[]; }
 interface FlatLine { page: number; col: number; top: number; bottom: number; text: string; }
-interface Slice { page: number; col: number; top: number; bottom: number; }
+interface Slice { page: number; col: number; top: number; bottom: number; full?: boolean; }
 
 // ─── Reconstrução de linhas com caixa delimitadora ───────────────
 function buildLines(items: any[], cols: ColBound[]): Line[] {
@@ -281,34 +281,45 @@ export async function extractExam(file: File, onProgress?: ProgressFn): Promise<
 
 // Agrupa as linhas de uma questão por (página, coluna) e gera uma fatia por grupo,
 // usando o topo/base REAIS das linhas — sem estimativas de margem.
+const FIG_GAP = 55; // espaço vertical (pt) que indica uma figura entre linhas
+
 function slicesForRun(runLines: FlatLine[], meta: PageMeta[], margin: number): Slice[] {
-  const groups: { page: number; col: number; top: number; bottom: number }[] = [];
+  const groups: { page: number; col: number; lines: FlatLine[] }[] = [];
   for (const ln of runLines) {
     const last = groups[groups.length - 1];
-    if (last && last.page === ln.page && last.col === ln.col) {
-      last.top = Math.max(last.top, ln.top);
-      last.bottom = Math.min(last.bottom, ln.bottom);
-    } else {
-      groups.push({ page: ln.page, col: ln.col, top: ln.top, bottom: ln.bottom });
-    }
+    if (last && last.page === ln.page && last.col === ln.col) last.lines.push(ln);
+    else groups.push({ page: ln.page, col: ln.col, lines: [ln] });
   }
   // Só expande para a próxima coluna/página se a coluna anterior "transbordou"
-  // (terminou perto do rodapé). Se sobrou espaço em branco, a questão acabou ali —
-  // isso evita capturar o início da próxima questão que fica em outra coluna.
+  // (terminou perto do rodapé). Evita capturar o início da próxima questão.
   const kept = groups.slice(0, 1);
   for (let i = 1; i < groups.length; i++) {
-    const prev = groups[i - 1];
-    if (prev.bottom <= meta[prev.page].height * 0.13) kept.push(groups[i]);
+    const prevBottom = Math.min(...kept[kept.length - 1].lines.map(l => l.bottom));
+    if (prevBottom <= meta[kept[kept.length - 1].page].height * 0.13) kept.push(groups[i]);
     else break;
   }
   return kept.map(g => {
-    const h = meta[g.page].height;
-    return {
-      page: g.page,
-      col: g.col,
-      top: Math.min(h, g.top + margin),
-      bottom: Math.max(0, g.bottom - margin),
-    };
+    const pm = meta[g.page];
+    const lines = g.lines.slice().sort((a, b) => b.top - a.top);
+    const top = Math.min(pm.height, lines[0].top + margin);
+    const bottom = Math.max(0, lines[lines.length - 1].bottom - margin);
+    // Há uma figura grande (gap vertical) na questão?
+    let hasFigure = false;
+    for (let i = 0; i < lines.length - 1; i++) {
+      if (lines[i].bottom - lines[i + 1].top > FIG_GAP) { hasFigure = true; break; }
+    }
+    // Largura total só quando há figura E a coluna vizinha está vazia em TODA a
+    // altura da questão (questão realmente de largura total; evita invadir a vizinha).
+    let full = false;
+    if (hasFigure && pm.cols.length > 1) {
+      const otherHasText = pm.lines.some(l => {
+        if (l.col === g.col) return false;
+        const cy = (l.top + l.bottom) / 2;
+        return cy < top && cy > bottom;
+      });
+      full = !otherHasText;
+    }
+    return { page: g.page, col: g.col, top, bottom, full };
   });
 }
 
@@ -317,10 +328,12 @@ async function cropSlices(meta: PageMeta[], slices: Slice[], _scale: number, ren
   for (const sl of slices) {
     const pm = meta[sl.page];
     const col = pm.cols[Math.min(sl.col, pm.cols.length - 1)];
+    const x0 = sl.full ? pm.width * 0.02 : col.x0;
+    const x1 = sl.full ? pm.width * 0.98 : col.x1;
     const { canvas, vp } = await renderPage(sl.page);
     // Mapeamento oficial pdfjs PDF→canvas (lida com offset de MediaBox e rotação).
-    const [xa] = vp.convertToViewportPoint(col.x0 - 2, 0);
-    const [xb] = vp.convertToViewportPoint(col.x1 + 2, 0);
+    const [xa] = vp.convertToViewportPoint(x0 - 2, 0);
+    const [xb] = vp.convertToViewportPoint(x1 + 2, 0);
     const sx = Math.max(0, Math.floor(Math.min(xa, xb)));
     const sxEnd = Math.min(canvas.width, Math.ceil(Math.max(xa, xb)));
     const sw = Math.max(1, sxEnd - sx);
