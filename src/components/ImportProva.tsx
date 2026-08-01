@@ -1,14 +1,16 @@
 import { useState, useRef, useMemo } from 'react';
 import type { ChangeEvent } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, FileUp, Loader2, CheckCircle2, FileText, Sparkles } from 'lucide-react';
+import { ArrowLeft, FileUp, Loader2, CheckCircle2, FileText, Sparkles, Tag } from 'lucide-react';
 import type { Question, View } from '../types';
 import { ANSWERS } from '../types';
 import { extractExam } from '../pdfImport';
 import type { ExtractedQuestion } from '../pdfImport';
+import TagAutocomplete from './TagAutocomplete';
 
 interface ImportProvaProps {
   subjects: string[];
+  allTags: string[];
   primaryColor: string; accentColor: string;
   onNavigate: (v: View) => void;
   onImport: (questions: Question[]) => void;
@@ -27,6 +29,7 @@ export default function ImportProva(p: ImportProvaProps) {
   const [questions, setQuestions] = useState<ExtractedQuestion[]>([]);
   const [cards, setCards] = useState<CardState[]>([]);
   const [sectionFilter, setSectionFilter] = useState<string>('Todas');
+  const [importTags, setImportTags] = useState<string[]>([]);
 
   const sections = useMemo(() => Array.from(new Set(questions.map(q => q.section))).filter(Boolean), [questions]);
 
@@ -76,7 +79,7 @@ export default function ImportProva(p: ImportProvaProps) {
         imageUrl: q.imageDataUrl,
         answer: cards[i].answer,
         subject: cards[i].subject,
-        tags: [],
+        tags: [...importTags],
         createdAt: now + i,
         resolutionImageUrls: [],
         source: sourceLabel.trim() || 'Prova importada',
@@ -140,6 +143,15 @@ export default function ImportProva(p: ImportProvaProps) {
             <button onClick={() => { setStatus('idle'); setError(null); }} className="px-4 py-2.5 rounded-xl text-sm font-bold border transition-colors hover:bg-white" style={{ borderColor: `${p.primaryColor}30`, color: p.primaryColor }}>
               Outro PDF
             </button>
+          </div>
+
+          <div className="mb-5">
+            <label className="text-xs font-semibold mb-1 flex items-center gap-1.5" style={{ color: p.accentColor }}>
+              <Tag className="w-3.5 h-3.5" /> Tags (aplicadas a todas as questões importadas)
+            </label>
+            <div className="max-w-xl">
+              <TagAutocomplete tags={importTags} setTags={setImportTags} allTags={p.allTags} primaryColor={p.primaryColor} accentColor={p.accentColor} placeholder="Ex.: Cinemática, ENEM 2025..." />
+            </div>
           </div>
 
           {error && <p className="mb-4 text-sm font-medium text-amber-600">{error}</p>}

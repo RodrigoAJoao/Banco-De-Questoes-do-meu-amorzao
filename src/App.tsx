@@ -494,7 +494,7 @@ function App() {
       case 'performance':
         return <Performance attempts={attempts} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} allTags={allTags} onNavigate={setCurrentView} />;
       case 'import-prova':
-        return <ImportProva subjects={SUBJECTS} primaryColor={primaryColor} accentColor={accentColor} onNavigate={setCurrentView} onImport={handleImportProva} />;
+        return <ImportProva subjects={SUBJECTS} allTags={allTags} primaryColor={primaryColor} accentColor={accentColor} onNavigate={setCurrentView} onImport={handleImportProva} />;
       case 'edit-profile':
         return <EditProfile userName={userName} setUserName={setUserName} userPhoto={userPhoto} setUserPhoto={setUserPhoto} bgImage={bgImage} setBgImage={setBgImage} primaryColor={primaryColor} setPrimaryColor={setPrimaryColor} secondaryColor={secondaryColor} setSecondaryColor={setSecondaryColor} accentColor={accentColor} setAccentColor={setAccentColor} statsColor={statsColor} setStatsColor={setStatsColor} statsBgColor={statsBgColor} setStatsBgColor={setStatsBgColor} profilePhotoInputRef={profilePhotoInputRef} bgImageInputRef={bgImageInputRef} onProfilePhotoUpload={handleProfilePhotoUpload} onBgImageUpload={handleBgImageUpload} onResetDefaults={handleResetDefaults} onNavigate={setCurrentView} />;
       default:
