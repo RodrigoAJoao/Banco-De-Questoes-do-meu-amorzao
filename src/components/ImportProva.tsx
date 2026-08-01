@@ -16,7 +16,7 @@ interface ImportProvaProps {
   onImport: (questions: Question[]) => void;
 }
 
-interface CardState { selected: boolean; subject: string; answer: string; }
+interface CardState { selected: boolean; subject: string; answer: string; tags: string[] }
 
 export default function ImportProva(p: ImportProvaProps) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -48,7 +48,7 @@ export default function ImportProva(p: ImportProvaProps) {
       setExamType(result.examType);
       setSourceLabel(result.suggestedSource || 'Prova importada');
       setQuestions(result.questions);
-      setCards(result.questions.map(q => ({ selected: true, subject: q.section, answer: 'A' })));
+      setCards(result.questions.map(q => ({ selected: true, subject: q.section, answer: 'A', tags: [] })));
       setStatus('done');
       if (result.questions.length === 0) setError('Nenhuma questão detectada automaticamente neste PDF.');
     } catch (err) {
@@ -79,7 +79,7 @@ export default function ImportProva(p: ImportProvaProps) {
         imageUrl: q.imageDataUrl,
         answer: cards[i].answer,
         subject: cards[i].subject,
-        tags: [...importTags],
+        tags: Array.from(new Set([...importTags, ...cards[i].tags])),
         createdAt: now + i,
         resolutionImageUrls: [],
         source: sourceLabel.trim() || 'Prova importada',
@@ -147,7 +147,7 @@ export default function ImportProva(p: ImportProvaProps) {
 
           <div className="mb-5">
             <label className="text-xs font-semibold mb-1 flex items-center gap-1.5" style={{ color: p.accentColor }}>
-              <Tag className="w-3.5 h-3.5" /> Tags (aplicadas a todas as questões importadas)
+              <Tag className="w-3.5 h-3.5" /> Tags gerais (aplicadas a todas) — cada questão também tem tags próprias abaixo
             </label>
             <div className="max-w-xl">
               <TagAutocomplete tags={importTags} setTags={setImportTags} allTags={p.allTags} primaryColor={p.primaryColor} accentColor={p.accentColor} placeholder="Ex.: Cinemática, ENEM 2025..." />
@@ -196,6 +196,10 @@ export default function ImportProva(p: ImportProvaProps) {
                               <button key={a} onClick={() => updateCard(i, { answer: a })} className={`w-6 h-6 rounded-md text-[11px] font-bold transition-all ${c.answer === a ? 'text-white' : 'bg-gray-100 text-gray-500'}`} style={{ backgroundColor: c.answer === a ? p.primaryColor : undefined }}>{a}</button>
                             ))}
                           </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase text-gray-400 flex items-center gap-1 mb-1"><Tag className="w-3 h-3" /> Tags desta questão</label>
+                          <TagAutocomplete tags={c.tags} setTags={(t) => updateCard(i, { tags: t })} allTags={p.allTags} primaryColor={p.primaryColor} accentColor={p.accentColor} placeholder="Tag só desta questão..." />
                         </div>
                       </div>
                     </div>
