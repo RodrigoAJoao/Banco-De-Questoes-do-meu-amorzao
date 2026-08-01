@@ -6,6 +6,7 @@ import type { Question, View } from '../types';
 import { ANSWERS } from '../types';
 import { extractExam } from '../pdfImport';
 import type { ExtractedQuestion } from '../pdfImport';
+import { serverAvailable, extractViaServer } from '../pdfImportServer';
 import TagAutocomplete from './TagAutocomplete';
 
 interface ImportProvaProps {
@@ -30,6 +31,7 @@ export default function ImportProva(p: ImportProvaProps) {
   const [cards, setCards] = useState<CardState[]>([]);
   const [sectionFilter, setSectionFilter] = useState<string>('Todas');
   const [importTags, setImportTags] = useState<string[]>([]);
+  const [usedServer, setUsedServer] = useState(false);
 
   const sections = useMemo(() => Array.from(new Set(questions.map(q => q.section))).filter(Boolean), [questions]);
 
@@ -44,7 +46,25 @@ export default function ImportProva(p: ImportProvaProps) {
     setError(null); setStatus('processing'); setProgress(0); setProgressMsg('Abrindo PDF...');
     setQuestions([]); setCards([]);
     try {
-      const result = await extractExam(file, (msg, pct) => { setProgressMsg(msg); setProgress(pct); });
+      // Tenta o extrator server-side (PyMuPDF, melhor qualidade); se indisponível,
+      // usa o extrator do navegador (pdfjs).
+      let result;
+      const runClient = () => extractExam(file, (msg, pct) => { setProgressMsg(msg); setProgress(pct); });
+      setProgressMsg('Verificando extrator avançado...');
+      if (await serverAvailable()) {
+        try {
+          setProgress(15); setProgressMsg('Extraindo no servidor (PyMuPDF)... aguarde');
+          result = await extractViaServer(file);
+          setProgress(100); setUsedServer(true);
+        } catch (srvErr) {
+          console.warn('Servidor falhou, usando extrator do navegador', srvErr);
+          setUsedServer(false);
+          result = await runClient();
+        }
+      } else {
+        setUsedServer(false);
+        result = await runClient();
+      }
       setExamType(result.examType);
       setSourceLabel(result.suggestedSource || 'Prova importada');
       setQuestions(result.questions);
@@ -133,7 +153,11 @@ export default function ImportProva(p: ImportProvaProps) {
               <Sparkles className="w-5 h-5" style={{ color: p.primaryColor }} />
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide" style={{ color: p.primaryColor }}>{examType}</p>
-                <p className="text-sm text-gray-600">{questions.length} questões detectadas</p>
+                <p className="text-sm text-gray-600">{questions.length} questões detectadas
+                  <span className={`ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded ${usedServer ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {usedServer ? '✓ servidor (PyMuPDF)' : 'navegador'}
+                  </span>
+                </p>
               </div>
             </div>
             <div className="flex-1">
