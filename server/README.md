@@ -30,8 +30,31 @@ host, defina a variável de ambiente do Vite ao buildar/rodar o front:
 VITE_EXTRACT_API=https://seu-servidor/extract
 ```
 
-## Observação sobre deploy
+## Usar no TABLET / celular (app no Vercel)
 
-A resposta pode passar de 10 MB (imagens de ~90 questões), acima do limite de
-resposta de funções serverless da Vercel (4,5 MB). Por isso é um servidor
-standalone (rode localmente ao importar, ou hospede em Render/Railway/Fly/etc.).
+No tablet, `localhost` seria o próprio tablet — então o servidor precisa estar
+**hospedado num host público com HTTPS**. Passo a passo (Render, grátis):
+
+1. Suba este repositório no GitHub (já feito se você faz deploy pelo Vercel).
+2. Em [render.com](https://render.com) → **New → Blueprint** → selecione este
+   repositório. O `render.yaml` já configura o serviço (Docker em `server/`).
+   Ao terminar, o Render dá uma URL HTTPS, ex.: `https://extrator-provas.onrender.com`.
+3. No **Vercel** (projeto do front) → Settings → Environment Variables, adicione:
+   ```
+   VITE_EXTRACT_API = https://extrator-provas.onrender.com/extract
+   ```
+   e faça um **novo deploy** do front (a env entra no build do Vite).
+4. Pronto: no tablet, a aba Importar Prova usará o servidor PyMuPDF (selo
+   "✓ servidor"). A 1ª importação pode levar ~1 min (o plano free do Render
+   "acorda" o servidor); o app espera e acorda automaticamente.
+
+Alternativas de host equivalentes: Railway, Fly.io, Google Cloud Run, Hugging
+Face Spaces (todos com Docker/HTTPS).
+
+> Não dá para usar função serverless da Vercel: a resposta com ~90 imagens passa
+> de 10 MB, acima do limite de 4,5 MB da Vercel. Por isso é um servidor à parte.
+
+## Por que não o extrator do navegador (pdfjs)?
+
+Ele funciona offline, mas erra em caixas de largura total e figuras largas. Só é
+usado como fallback quando o servidor não está configurado/disponível.

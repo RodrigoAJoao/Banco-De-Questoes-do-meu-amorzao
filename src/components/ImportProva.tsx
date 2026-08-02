@@ -6,7 +6,7 @@ import type { Question, View } from '../types';
 import { ANSWERS } from '../types';
 import { extractExam } from '../pdfImport';
 import type { ExtractedQuestion } from '../pdfImport';
-import { serverAvailable, extractViaServer } from '../pdfImportServer';
+import { serverAvailable, extractViaServer, shouldTryServer, isServerConfigured } from '../pdfImportServer';
 import TagAutocomplete from './TagAutocomplete';
 
 interface ImportProvaProps {
@@ -50,14 +50,28 @@ export default function ImportProva(p: ImportProvaProps) {
       // usa o extrator do navegador (pdfjs).
       let result;
       const runClient = () => extractExam(file, (msg, pct) => { setProgressMsg(msg); setProgress(pct); });
-      setProgressMsg('Verificando extrator avançado...');
-      if (await serverAvailable()) {
+
+      // Servidor remoto configurado (produção): vai direto (acorda cold start).
+      // Local (dev): faz um health-check rápido antes.
+      let tryServer = false;
+      if (shouldTryServer()) {
+        if (isServerConfigured()) {
+          tryServer = true;
+        } else {
+          setProgressMsg('Verificando extrator avançado...');
+          tryServer = await serverAvailable();
+        }
+      }
+
+      if (tryServer) {
         try {
-          setProgress(15); setProgressMsg('Extraindo no servidor (PyMuPDF)... aguarde');
+          setProgress(15);
+          setProgressMsg('Extraindo no servidor (PyMuPDF)... pode levar até 1 min na 1ª vez');
           result = await extractViaServer(file);
           setProgress(100); setUsedServer(true);
         } catch (srvErr) {
           console.warn('Servidor falhou, usando extrator do navegador', srvErr);
+          setError('Não foi possível usar o servidor de extração; usando o extrator do navegador.');
           setUsedServer(false);
           result = await runClient();
         }

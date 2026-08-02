@@ -225,7 +225,13 @@ export async function extractExam(file: File, onProgress?: ProgressFn): Promise<
   }
 
   // Passo 3 — renderização + recorte por questão.
-  const RENDER_SCALE = Math.min(2.4, 1500 / meta[0].width);
+  // Em tablets/celulares usa escala menor para não estourar memória/limite de canvas.
+  const isMobile = typeof navigator !== 'undefined' &&
+    (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') ||
+     (typeof window !== 'undefined' && (window.innerWidth || 9999) < 820));
+  const RENDER_SCALE = isMobile
+    ? Math.min(1.8, 1150 / meta[0].width)
+    : Math.min(2.4, 1500 / meta[0].width);
   const cache = new Map<number, { canvas: HTMLCanvasElement; vp: any }>();
   const renderPage = async (p: number): Promise<{ canvas: HTMLCanvasElement; vp: any }> => {
     const hit = cache.get(p);

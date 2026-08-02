@@ -33,8 +33,11 @@ def extract():
         data = request.data  # corpo bruto (application/pdf)
     if not data:
         return jsonify(error="Nenhum PDF enviado."), 400
+    # Em tablet/celular usa escala menor (imagens mais leves = resposta mais rápida).
+    mobile = request.args.get("mobile") in ("1", "true", "yes")
+    scale = 1.7 if mobile else 2.1
     try:
-        result = extract_exam(io.BytesIO(data).getvalue())
+        result = extract_exam(io.BytesIO(data).getvalue(), render_scale=scale)
         return jsonify(result)
     except Exception as e:  # noqa
         import traceback
@@ -43,5 +46,7 @@ def extract():
 
 
 if __name__ == "__main__":
-    print("Extrator de provas (PyMuPDF) em http://localhost:8000")
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    import os
+    port = int(os.environ.get("PORT", "8000"))
+    print(f"Extrator de provas (PyMuPDF) em http://localhost:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)

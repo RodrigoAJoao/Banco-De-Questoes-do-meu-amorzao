@@ -1,0 +1,19 @@
+# Deploy do servidor de extração (PyMuPDF) no Render (https grátis).
+# Passos:
+#  1. Suba este repositório no GitHub.
+#  2. Em render.com → New → Blueprint → aponte para este repo.
+#  3. Ao terminar, copie a URL (ex.: https://extrator-provas.onrender.com).
+#  4. No Vercel (projeto do front), defina a env:
+#         VITE_EXTRACT_API = https://extrator-provas.onrender.com/extract
+#     e faça um novo deploy do front.
+# Obs.: o plano free "dorme" após inatividade; a 1ª importação pode levar ~1 min
+# (o app acorda o servidor automaticamente).
+services:
+  - type: web
+    name: extrator-provas
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
