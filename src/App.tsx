@@ -73,6 +73,8 @@ function App() {
   const [errorReason, setErrorReason] = useState<ErrorReason | undefined>(undefined);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  // Quantas questões foram classificadas em sequência sem sair da tela.
+  const [classifiedCount, setClassifiedCount] = useState(0);
 
   // ─── Quiz State ───────────────────────────────────────────────
   const [quizSubjects, setQuizSubjects] = useState<string[]>([]);
@@ -297,15 +299,30 @@ function App() {
         resolutionImageUrls, errorReason
       }, ...questions]);
     }
-    showToast(editingQuestionId ? 'Questão atualizada com sucesso! ✏️' : 'Questão salva com sucesso! 🎉', 'success');
-    clearForm();
-    setCurrentView('home');
+    if (editingQuestionId) {
+      // Edição: salva e volta ao menu, como antes.
+      showToast('Questão atualizada com sucesso! ✏️', 'success');
+      clearForm();
+      setCurrentView('home');
+    } else {
+      // Nova questão: fica na tela p/ classificar várias em sequência.
+      setClassifiedCount(c => c + 1);
+      showToast('Questão salva! Classifique a próxima. 🎉', 'success');
+      clearForm();
+    }
   };
 
   const clearForm = () => {
     setQuestionText(''); setQuestionResolution(''); setResolutionImages([]);
     setResolutionType('text'); setSelectedAnswer('A'); setSelectedSubject('Matemática');
     setTags([]); setErrorReason(undefined); setImagePreview(null); setEditingQuestionId(null);
+  };
+
+  // Navegação a partir do menu: ao abrir "Classificar" começa uma nova sessão
+  // (formulário limpo e contador zerado).
+  const handleMenuNavigate = (v: View) => {
+    if (v === 'add-question') { clearForm(); setClassifiedCount(0); }
+    setCurrentView(v);
   };
 
   const handleEditQuestion = (q: Question) => {
@@ -479,9 +496,9 @@ function App() {
   const renderCurrentView = () => {
     switch (currentView) {
       case 'home':
-        return <Home userName={userName} userPhoto={userPhoto} primaryColor={primaryColor} accentColor={accentColor} statsBgColor={statsBgColor} stats={stats} currentIndex={currentIndex} onPrevStat={prevStat} onNextStat={nextStat} onNavigate={setCurrentView} onExport={handleExportData} importRef={importFileInputRef} onImport={handleImportData} />;
+        return <Home userName={userName} userPhoto={userPhoto} primaryColor={primaryColor} accentColor={accentColor} statsBgColor={statsBgColor} stats={stats} currentIndex={currentIndex} onPrevStat={prevStat} onNextStat={nextStat} onNavigate={handleMenuNavigate} onExport={handleExportData} importRef={importFileInputRef} onImport={handleImportData} />;
       case 'add-question':
-        return <AddQuestion questionText={questionText} setQuestionText={setQuestionText} questionResolution={questionResolution} setQuestionResolution={setQuestionResolution} resolutionType={resolutionType} setResolutionType={setResolutionType} resolutionImages={resolutionImages} onRemoveResolutionImage={removeResolutionImage} selectedAnswer={selectedAnswer} setSelectedAnswer={setSelectedAnswer} selectedSubject={selectedSubject} setSelectedSubject={setSelectedSubject} tags={tags} setTags={setTags} allTags={allTags} errorReason={errorReason} setErrorReason={setErrorReason} imagePreview={imagePreview} onRemoveImage={() => setImagePreview(null)} editingQuestionId={editingQuestionId} fileInputRef={fileInputRef} resolutionFileInputRef={resolutionFileInputRef} onImageUpload={handleImageUpload} onResolutionImageUpload={handleResolutionImageUpload} onSubmit={handleSubmit} onCancel={() => { clearForm(); setCurrentView('home'); }} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} answers={ANSWERS} />;
+        return <AddQuestion questionText={questionText} setQuestionText={setQuestionText} questionResolution={questionResolution} setQuestionResolution={setQuestionResolution} resolutionType={resolutionType} setResolutionType={setResolutionType} resolutionImages={resolutionImages} onRemoveResolutionImage={removeResolutionImage} selectedAnswer={selectedAnswer} setSelectedAnswer={setSelectedAnswer} selectedSubject={selectedSubject} setSelectedSubject={setSelectedSubject} tags={tags} setTags={setTags} allTags={allTags} errorReason={errorReason} setErrorReason={setErrorReason} imagePreview={imagePreview} onRemoveImage={() => setImagePreview(null)} editingQuestionId={editingQuestionId} classifiedCount={classifiedCount} fileInputRef={fileInputRef} resolutionFileInputRef={resolutionFileInputRef} onImageUpload={handleImageUpload} onResolutionImageUpload={handleResolutionImageUpload} onSubmit={handleSubmit} onCancel={() => { clearForm(); setClassifiedCount(0); setCurrentView('home'); }} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} answers={ANSWERS} />;
       case 'take-quiz':
         return <TakeQuiz quizSubjects={quizSubjects} setQuizSubjects={setQuizSubjects} quizTags={quizTags} setQuizTags={setQuizTags} availableTags={quizAvailableTags} quizWrongCount={quizWrongCount} setQuizWrongCount={setQuizWrongCount} quizRightCount={quizRightCount} setQuizRightCount={setQuizRightCount} quizNewCount={quizNewCount} setQuizNewCount={setQuizNewCount} counts={quizCounts} useTimer={useTimer} setUseTimer={setUseTimer} timerMinutes={timerMinutes} setTimerMinutes={setTimerMinutes} drawnQuestions={drawnQuestions} onDraw={handleDrawQuestions} onStart={startQuiz} onNavigate={setCurrentView} primaryColor={primaryColor} accentColor={accentColor} subjects={SUBJECTS} />;
       case 'quiz-session':
@@ -498,7 +515,7 @@ function App() {
       case 'edit-profile':
         return <EditProfile userName={userName} setUserName={setUserName} userPhoto={userPhoto} setUserPhoto={setUserPhoto} bgImage={bgImage} setBgImage={setBgImage} primaryColor={primaryColor} setPrimaryColor={setPrimaryColor} secondaryColor={secondaryColor} setSecondaryColor={setSecondaryColor} accentColor={accentColor} setAccentColor={setAccentColor} statsColor={statsColor} setStatsColor={setStatsColor} statsBgColor={statsBgColor} setStatsBgColor={setStatsBgColor} profilePhotoInputRef={profilePhotoInputRef} bgImageInputRef={bgImageInputRef} onProfilePhotoUpload={handleProfilePhotoUpload} onBgImageUpload={handleBgImageUpload} onResetDefaults={handleResetDefaults} onNavigate={setCurrentView} />;
       default:
-        return <Home userName={userName} userPhoto={userPhoto} primaryColor={primaryColor} accentColor={accentColor} statsBgColor={statsBgColor} stats={stats} currentIndex={currentIndex} onPrevStat={prevStat} onNextStat={nextStat} onNavigate={setCurrentView} onExport={handleExportData} importRef={importFileInputRef} onImport={handleImportData} />;
+        return <Home userName={userName} userPhoto={userPhoto} primaryColor={primaryColor} accentColor={accentColor} statsBgColor={statsBgColor} stats={stats} currentIndex={currentIndex} onPrevStat={prevStat} onNextStat={nextStat} onNavigate={handleMenuNavigate} onExport={handleExportData} importRef={importFileInputRef} onImport={handleImportData} />;
     }
   };
 

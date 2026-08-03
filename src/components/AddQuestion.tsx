@@ -18,6 +18,7 @@ interface AddQuestionProps {
   imagePreview: string | null;
   onRemoveImage: () => void;
   editingQuestionId: string | null;
+  classifiedCount: number;
   fileInputRef: RefObject<HTMLInputElement | null>;
   resolutionFileInputRef: RefObject<HTMLInputElement | null>;
   onImageUpload: (e: ChangeEvent<HTMLInputElement>) => void;
@@ -38,6 +39,11 @@ export default function AddQuestion(p: AddQuestionProps) {
         <h2 className="text-3xl font-romantic font-bold" style={{ color: p.accentColor }}>
           {p.editingQuestionId ? 'Editar Questão' : 'Adicionar Nova Questão'}
         </h2>
+        {!p.editingQuestionId && p.classifiedCount > 0 && (
+          <span className="ml-auto text-xs font-bold px-3 py-1.5 rounded-full shadow-sm" style={{ backgroundColor: `${p.primaryColor}15`, color: p.primaryColor }}>
+            {p.classifiedCount} classificada{p.classifiedCount > 1 ? 's' : ''} nesta sessão
+          </span>
+        )}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-6">
@@ -142,8 +148,11 @@ export default function AddQuestion(p: AddQuestionProps) {
           </div>
 
           <motion.button onClick={p.onSubmit} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-full py-4 text-white rounded-xl font-bold text-lg shadow-lg transition-colors" style={{ backgroundColor: p.primaryColor }}>
-            {p.editingQuestionId ? 'Salvar Alterações' : 'Salvar Questão'}
+            {p.editingQuestionId ? 'Salvar Alterações' : 'Salvar e classificar próxima'}
           </motion.button>
+          {!p.editingQuestionId && (
+            <p className="text-xs text-gray-400 text-center -mt-3">Você continua nesta tela para classificar a próxima. Use a seta ← para voltar ao menu.</p>
+          )}
         </div>
       </div>
     </motion.div>

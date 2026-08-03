@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import type { ChangeEvent } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, FileUp, Loader2, CheckCircle2, FileText, Sparkles, Tag } from 'lucide-react';
+import { ArrowLeft, FileUp, Loader2, CheckCircle2, FileText, Sparkles, Tag, ImageUp, RotateCcw } from 'lucide-react';
 import type { Question, View } from '../types';
 import { ANSWERS } from '../types';
 import { extractExam } from '../pdfImport';
@@ -17,10 +17,12 @@ interface ImportProvaProps {
   onImport: (questions: Question[]) => void;
 }
 
-interface CardState { selected: boolean; subject: string; answer: string; tags: string[] }
+interface CardState { selected: boolean; subject: string; answer: string; tags: string[]; imageOverride?: string }
 
 export default function ImportProva(p: ImportProvaProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const swapInputRef = useRef<HTMLInputElement>(null);
+  const swapIdx = useRef<number>(-1);
   const [status, setStatus] = useState<'idle' | 'processing' | 'done'>('idle');
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState('');
@@ -102,6 +104,19 @@ export default function ImportProva(p: ImportProvaProps) {
     setCards(prev => prev.map((c, idx) => idx === i ? { ...c, ...patch } : c));
   };
 
+  // Troca a imagem recortada automaticamente por uma imagem enviada pelo usuário.
+  const openSwap = (i: number) => { swapIdx.current = i; swapInputRef.current?.click(); };
+  const handleSwapFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    const i = swapIdx.current;
+    if (!file || i < 0) return;
+    if (!/^image\//.test(file.type)) { setError('Selecione um arquivo de imagem.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => updateCard(i, { imageOverride: reader.result as string });
+    reader.readAsDataURL(file);
+  };
+
   const doImport = () => {
     const now = Date.now();
     const toImport: Question[] = [];
@@ -110,7 +125,7 @@ export default function ImportProva(p: ImportProvaProps) {
       toImport.push({
         id: `${now}_${i}`,
         text: q.text || '',
-        imageUrl: q.imageDataUrl,
+        imageUrl: cards[i].imageOverride || q.imageDataUrl,
         answer: cards[i].answer,
         subject: cards[i].subject,
         tags: Array.from(new Set([...importTags, ...cards[i].tags])),
@@ -125,6 +140,7 @@ export default function ImportProva(p: ImportProvaProps) {
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-6xl glass-card rounded-3xl p-8">
+      <input type="file" ref={swapInputRef} accept="image/*" onChange={handleSwapFile} className="hidden" />
       <div className="flex items-center mb-6">
         <button onClick={() => p.onNavigate('home')} className="p-2 hover:bg-pink-100 rounded-full transition-colors mr-4">
           <ArrowLeft className="w-6 h-6" style={{ color: p.primaryColor }} />
@@ -214,11 +230,24 @@ export default function ImportProva(p: ImportProvaProps) {
                   return (
                     <div key={i} className={`rounded-2xl border-2 overflow-hidden transition-all ${c.selected ? '' : 'opacity-60'}`} style={{ borderColor: c.selected ? p.primaryColor : '#e5e7eb', backgroundColor: 'white' }}>
                       <div className="relative">
-                        <img src={q.imageDataUrl} alt={q.label} className="w-full max-h-56 object-contain bg-white border-b" />
+                        <img src={c.imageOverride || q.imageDataUrl} alt={q.label} className="w-full max-h-56 object-contain bg-white border-b" />
                         <button onClick={() => updateCard(i, { selected: !c.selected })} className="absolute top-2 left-2 w-7 h-7 rounded-lg flex items-center justify-center shadow-md transition-colors" style={{ backgroundColor: c.selected ? p.primaryColor : 'white', color: c.selected ? 'white' : '#9ca3af' }}>
                           <CheckCircle2 className="w-5 h-5" />
                         </button>
                         <span className="absolute top-2 right-2 text-[11px] font-bold px-2 py-1 rounded-lg bg-black/55 text-white">{q.label}</span>
+                        <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                          {c.imageOverride && (
+                            <button onClick={() => updateCard(i, { imageOverride: undefined })} className="flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-white/90 shadow-sm hover:bg-white transition-colors text-gray-600" title="Voltar à imagem recortada da prova">
+                              <RotateCcw className="w-3 h-3" /> Reverter
+                            </button>
+                          )}
+                          <button onClick={() => openSwap(i)} className="flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-white/90 shadow-sm hover:bg-white transition-colors" style={{ color: p.primaryColor }} title="Trocar por uma imagem sua">
+                            <ImageUp className="w-3.5 h-3.5" /> Trocar
+                          </button>
+                        </div>
+                        {c.imageOverride && (
+                          <span className="absolute bottom-2 left-2 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/90 text-white">imagem trocada</span>
+                        )}
                       </div>
                       <div className="p-3 space-y-2">
                         <div className="flex items-center gap-2">
