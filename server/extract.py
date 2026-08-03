@@ -112,7 +112,7 @@ def _global_gutter(pages, width):
     return best_x
 
 
-def extract_exam(pdf_bytes, render_scale=2.2):
+def extract_exam(pdf_bytes, render_scale=2.2, img_max_width=1000, img_quality=76):
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     W = doc[0].rect.width
 
@@ -247,14 +247,17 @@ def extract_exam(pdf_bytes, render_scale=2.2):
                 if hi - lo <= 5:  # faixas verticais disjuntas → vira a coluna
                     regions = [g0, g1]
             for cbs in regions:
-                single = regions == [bs]
                 x0 = min(b["x0"] for b in cbs); y0 = min(b["y0"] for b in cbs)
                 x1 = max(b["x1"] for b in cbs); y1 = max(b["y1"] for b in cbs)
-                # inclui figuras que se sobrepõem a esta região da questão
+                # Questão de largura total (coluna única/figura larga): pode puxar
+                # figuras que extrapolam a caixa de texto. Questão de UMA coluna
+                # numa página de 2 colunas: NÃO — senão puxa a figura da coluna
+                # vizinha (que é de outra questão) e o recorte vira a página toda.
+                region_fullwidth = (x1 - x0) > W * 0.6
                 for (ix0, iy0, ix1, iy1) in pages[pi]["images"]:
                     v_ov = min(iy1, y1) - max(iy0, y0) > -8      # sobrep. vertical
                     h_ov = min(ix1, x1) - max(ix0, x0) > -8      # sobrep. horizontal
-                    if v_ov and (single or h_ov):
+                    if v_ov and (h_ov or region_fullwidth):
                         x0 = min(x0, ix0); x1 = max(x1, ix1)
                         y0 = min(y0, iy0); y1 = max(y1, iy1)
                 x0 = max(W * 0.02, x0 - 4); x1 = min(W * 0.985, x1 + 4)
@@ -263,7 +266,7 @@ def extract_exam(pdf_bytes, render_scale=2.2):
                                          clip=fitz.Rect(x0, y0, x1, y1), alpha=False)
                 parts.append(Image.open(io.BytesIO(pix.tobytes("png"))))
 
-        img_b64 = _stack(parts)
+        img_b64 = _stack(parts, max_width=img_max_width, quality=img_quality)
         text = "\n".join(b["text"] for (pp, b) in run if pp in page_blocks and b in page_blocks[pp])
         questions.append({
             "number": num, "label": f"Questão {num}",
@@ -275,7 +278,14 @@ def extract_exam(pdf_bytes, render_scale=2.2):
             "questions": questions}
 
 
-def _stack(parts):
+def _stack(parts, max_width=1000, quality=76):
+    """Empilha os recortes da questão e devolve um JPEG (data URL).
+
+    Limita a largura final e comprime mais forte: uma prova inteira são ~90
+    imagens e, sem isso, a resposta do servidor passa de 20-40 MB (o que faz a
+    importação falhar/truncar no tablet — só parte das questões chega). Reduzir
+    para ~920 px de largura mantém o texto legível e derruba muito o tamanho.
+    """
     if not parts:
         return ""
     gap = 8
@@ -286,8 +296,11 @@ def _stack(parts):
     for im in parts:
         canvas.paste(im, (0, y))
         y += im.height + gap
+    if canvas.width > max_width:
+        new_h = max(1, round(canvas.height * max_width / canvas.width))
+        canvas = canvas.resize((max_width, new_h), Image.LANCZOS)
     buf = io.BytesIO()
-    canvas.save(buf, format="JPEG", quality=82)
+    canvas.save(buf, format="JPEG", quality=quality, optimize=True, progressive=True)
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 

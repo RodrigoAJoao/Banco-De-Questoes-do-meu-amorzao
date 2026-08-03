@@ -33,11 +33,18 @@ def extract():
         data = request.data  # corpo bruto (application/pdf)
     if not data:
         return jsonify(error="Nenhum PDF enviado."), 400
-    # Em tablet/celular usa escala menor (imagens mais leves = resposta mais rápida).
+    # Em tablet/celular manda imagens BEM mais leves: uma prova inteira são ~90
+    # imagens; sem isso a resposta passa de 25 MB e o navegador do tablet não dá
+    # conta (só parte das questões aparece). Menor largura + JPEG mais comprimido
+    # derrubam o tamanho (o texto continua legível; dá p/ ampliar no app).
     mobile = request.args.get("mobile") in ("1", "true", "yes")
-    scale = 1.7 if mobile else 2.1
     try:
-        result = extract_exam(io.BytesIO(data).getvalue(), render_scale=scale)
+        if mobile:
+            result = extract_exam(io.BytesIO(data).getvalue(),
+                                  render_scale=1.6, img_max_width=720, img_quality=60)
+        else:
+            result = extract_exam(io.BytesIO(data).getvalue(),
+                                  render_scale=2.1, img_max_width=1000, img_quality=76)
         return jsonify(result)
     except Exception as e:  # noqa
         import traceback
