@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import type { ChangeEvent } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, FileUp, Loader2, CheckCircle2, FileText, Sparkles, Tag, ImageUp, RotateCcw } from 'lucide-react';
+import { ArrowLeft, FileUp, Loader2, CheckCircle2, FileText, Sparkles, Tag, ImageUp, RotateCcw, Lightbulb, Plus, X } from 'lucide-react';
 import type { Question, View } from '../types';
 import { ANSWERS } from '../types';
 import { extractExam } from '../pdfImport';
@@ -17,12 +17,14 @@ interface ImportProvaProps {
   onImport: (questions: Question[]) => void;
 }
 
-interface CardState { selected: boolean; subject: string; answer: string; tags: string[]; imageOverride?: string }
+interface CardState { selected: boolean; subject: string; answer: string; tags: string[]; imageOverride?: string; resolution: string; resolutionImages: string[] }
 
 export default function ImportProva(p: ImportProvaProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const swapInputRef = useRef<HTMLInputElement>(null);
   const swapIdx = useRef<number>(-1);
+  const resInputRef = useRef<HTMLInputElement>(null);
+  const resIdx = useRef<number>(-1);
   const [status, setStatus] = useState<'idle' | 'processing' | 'done'>('idle');
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState('');
@@ -84,7 +86,7 @@ export default function ImportProva(p: ImportProvaProps) {
       setExamType(result.examType);
       setSourceLabel(result.suggestedSource || 'Prova importada');
       setQuestions(result.questions);
-      setCards(result.questions.map(q => ({ selected: true, subject: q.section, answer: 'A', tags: [] })));
+      setCards(result.questions.map(q => ({ selected: true, subject: q.section, answer: 'A', tags: [], resolution: '', resolutionImages: [] })));
       setStatus('done');
       if (result.questions.length === 0) setError('Nenhuma questão detectada automaticamente neste PDF.');
     } catch (err) {
@@ -117,6 +119,24 @@ export default function ImportProva(p: ImportProvaProps) {
     reader.readAsDataURL(file);
   };
 
+  // Adiciona imagens da resolução a uma questão (aceita várias de uma vez).
+  const openResUpload = (i: number) => { resIdx.current = i; resInputRef.current?.click(); };
+  const handleResFiles = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []) as File[];
+    if (e.target) e.target.value = '';
+    const i = resIdx.current;
+    if (i < 0 || files.length === 0) return;
+    files.forEach((file) => {
+      if (!/^image\//.test(file.type)) return;
+      const reader = new FileReader();
+      reader.onload = () => setCards(prev => prev.map((c, idx) =>
+        idx === i ? { ...c, resolutionImages: [...c.resolutionImages, reader.result as string] } : c));
+      reader.readAsDataURL(file);
+    });
+  };
+  const removeResImage = (i: number, imgIdx: number) => setCards(prev => prev.map((c, idx) =>
+    idx === i ? { ...c, resolutionImages: c.resolutionImages.filter((_, k) => k !== imgIdx) } : c));
+
   const doImport = () => {
     const now = Date.now();
     const toImport: Question[] = [];
@@ -130,7 +150,8 @@ export default function ImportProva(p: ImportProvaProps) {
         subject: cards[i].subject,
         tags: Array.from(new Set([...importTags, ...cards[i].tags])),
         createdAt: now + i,
-        resolutionImageUrls: [],
+        resolution: cards[i].resolution.trim() || undefined,
+        resolutionImageUrls: cards[i].resolutionImages,
         source: sourceLabel.trim() || 'Prova importada',
       });
     });
@@ -141,6 +162,7 @@ export default function ImportProva(p: ImportProvaProps) {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-6xl glass-card rounded-3xl p-8">
       <input type="file" ref={swapInputRef} accept="image/*" onChange={handleSwapFile} className="hidden" />
+      <input type="file" ref={resInputRef} accept="image/*" multiple onChange={handleResFiles} className="hidden" />
       <div className="flex items-center mb-6">
         <button onClick={() => p.onNavigate('home')} className="p-2 hover:bg-pink-100 rounded-full transition-colors mr-4">
           <ArrowLeft className="w-6 h-6" style={{ color: p.primaryColor }} />
@@ -267,6 +289,25 @@ export default function ImportProva(p: ImportProvaProps) {
                         <div>
                           <label className="text-[10px] font-bold uppercase text-gray-400 flex items-center gap-1 mb-1"><Tag className="w-3 h-3" /> Tags desta questão</label>
                           <TagAutocomplete tags={c.tags} setTags={(t) => updateCard(i, { tags: t })} allTags={p.allTags} primaryColor={p.primaryColor} accentColor={p.accentColor} placeholder="Tag só desta questão..." />
+                        </div>
+                        <div className="pt-2 border-t" style={{ borderColor: `${p.primaryColor}12` }}>
+                          <label className="text-[10px] font-bold uppercase text-gray-400 flex items-center gap-1 mb-1"><Lightbulb className="w-3 h-3" /> Resolução desta questão (opcional)</label>
+                          <textarea value={c.resolution} onChange={(e) => updateCard(i, { resolution: e.target.value })} placeholder="Explique a resolução (texto)..." className="w-full p-2 bg-white border rounded-lg text-xs outline-none focus:ring-2 resize-none" rows={2} style={{ borderColor: `${p.primaryColor}20`, '--tw-ring-color': p.primaryColor } as any} />
+                          {c.resolutionImages.length > 0 && (
+                            <div className="grid grid-cols-3 gap-1.5 mt-1.5">
+                              {c.resolutionImages.map((img, idx) => (
+                                <div key={idx} className="relative rounded-lg overflow-hidden border" style={{ borderColor: `${p.primaryColor}30` }}>
+                                  <img src={img} alt={`Resolução ${idx + 1}`} className="w-full h-14 object-cover" />
+                                  <button type="button" onClick={() => removeResImage(i, idx)} className="absolute top-0.5 right-0.5 bg-rose-500 text-white rounded-full p-0.5 shadow opacity-90 hover:opacity-100" title="Remover imagem">
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <button type="button" onClick={() => openResUpload(i)} className="mt-1.5 w-full flex items-center justify-center gap-1 text-[11px] font-bold py-1.5 rounded-lg border border-dashed transition-colors hover:bg-white" style={{ borderColor: `${p.primaryColor}40`, color: p.primaryColor }}>
+                            <Plus className="w-3 h-3" /> {c.resolutionImages.length > 0 ? 'Adicionar mais imagens' : 'Imagens da resolução'}
+                          </button>
                         </div>
                       </div>
                     </div>
