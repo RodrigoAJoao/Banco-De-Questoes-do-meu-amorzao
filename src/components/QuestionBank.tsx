@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, X, Heart, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, X, Heart, Pencil, ChevronLeft, ChevronRight, Filter, Plus } from 'lucide-react';
 import type { Question, View } from '../types';
 import { ERROR_REASONS, normalizeTag } from '../types';
 import MultiSelectFilter from './MultiSelectFilter';
@@ -21,6 +21,9 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
   const [bankStatus, setBankStatus] = useState<'all' | 'correct' | 'incorrect'>('all');
   const [bankErrorReason, setBankErrorReason] = useState('all');
   const [bankTags, setBankTags] = useState<string[]>([]);
+  // Funil de tags: ON = questão precisa ter TODAS as tags (interseção, E);
+  // OFF = questão que tenha QUALQUER uma das tags (união, OU).
+  const [tagFunnel, setTagFunnel] = useState(false);
   const [bankSource, setBankSource] = useState('all');
   const [bankSearch, setBankSearch] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -57,9 +60,13 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
       || (bankSource === '__manual__' && !q.source)
       || (bankSource === '__imported__' && !!q.source)
       || q.source === bankSource;
+    const qTagsNorm = (q.tags && Array.isArray(q.tags)) ? q.tags.map(normalizeTag) : [];
     const matchesTags = bankTags.length === 0 || (
-      q.tags && Array.isArray(q.tags) &&
-      q.tags.some(t => bankTags.some(sel => normalizeTag(sel) === normalizeTag(t)))
+      tagFunnel
+        // Funil (E): a questão precisa ter TODAS as tags selecionadas.
+        ? bankTags.every(sel => qTagsNorm.includes(normalizeTag(sel)))
+        // Soma (OU): basta ter QUALQUER uma das tags selecionadas.
+        : bankTags.some(sel => qTagsNorm.includes(normalizeTag(sel)))
     );
     const matchesSearch = (q.text || '').toLowerCase().includes(bankSearch.toLowerCase()) ||
                          (q.subject || '').toLowerCase().includes(bankSearch.toLowerCase()) ||
@@ -109,7 +116,22 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
       </div>
 
       <div className="mb-6">
-        <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: accentColor }}>Filtrar por Tag</label>
+        <div className="flex items-center justify-between gap-2 mb-2 max-w-md">
+          <label className="block text-xs font-bold uppercase tracking-wider" style={{ color: accentColor }}>Filtrar por Tag</label>
+          <button
+            onClick={() => { setTagFunnel(v => !v); setCurrentPage(0); }}
+            title={tagFunnel
+              ? 'Funil ligado: mostra só as questões que têm TODAS as tags (ex.: ENEM + Geometria = ENEM de Geometria). Toque para desligar.'
+              : 'Funil desligado: soma as tags — mostra questões que tenham QUALQUER uma delas. Toque para ligar o funil (E).'}
+            className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-lg border transition-all"
+            style={tagFunnel
+              ? { backgroundColor: primaryColor, color: 'white', borderColor: primaryColor }
+              : { backgroundColor: 'white', color: primaryColor, borderColor: `${primaryColor}30` }}
+          >
+            {tagFunnel ? <Filter className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+            {tagFunnel ? 'Funil: todas as tags (E)' : 'Soma: qualquer tag (OU)'}
+          </button>
+        </div>
         <div className="max-w-md">
           <MultiSelectFilter
             selected={bankTags}
@@ -121,6 +143,13 @@ export default function QuestionBank({ questions, setQuestions, primaryColor, ac
             emptyText={availableTags.length === 0 ? 'Nenhuma tag disponível' : 'Nenhuma opção disponível'}
           />
         </div>
+        {bankTags.length > 1 && (
+          <p className="text-[11px] text-gray-400 mt-1.5 max-w-md">
+            {tagFunnel
+              ? 'Mostrando questões que têm todas as tags selecionadas ao mesmo tempo.'
+              : 'Mostrando questões que têm qualquer uma das tags selecionadas.'}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
